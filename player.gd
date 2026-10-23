@@ -103,6 +103,7 @@ class CameraSwipeArea extends Control:
                 last_position = event.position
             else:
                 tracking = false
+
             accept_event()
 
         elif event is InputEventScreenDrag and tracking:
@@ -147,17 +148,19 @@ var invulnerable := false
 @export var camera_pitch := 18.0
 @export var camera_look_height := 1.2
 @export var camera_follow_speed := 6.0
-@export var camera_turn_speed := 5.0
 @export var camera_swipe_sensitivity := 0.006
-
 @export var respawn_delay := 2.0
 
 var gravity := 20.0
+
 var camera: Camera3D
 var camera_rig: Node3D
+
 var camera_yaw := 0.0
+var camera_yaw_target := 0.0
 var camera_pitch_current := 18.0
 var camera_pitch_target := 18.0
+
 var joystick_input := Vector2.ZERO
 var spawn_position := Vector3(0, 1, 4)
 
@@ -172,6 +175,7 @@ func _ready() -> void:
     collision.shape = shape
     add_child(collision)
 
+    # Keep the existing character builder.
     var builder_script = preload(
         "res://scripts/CharacterBuilder.gd"
     )
@@ -183,19 +187,24 @@ func _ready() -> void:
     character_model.name = "VisibleHeroModel"
     add_child(character_model)
 
-    # Camera rig is independent of hero rotation.
-    # This prevents the view from snapping whenever the hero turns.
+    # Create an independent camera rig.
     camera_rig = Node3D.new()
     camera_rig.name = "CameraRig"
-    get_tree().root.add_child.call_deferred(camera_rig)
+    get_tree().root.add_child(camera_rig)
 
     camera = Camera3D.new()
     camera.name = "FollowCamera"
     camera.current = true
     camera_rig.add_child(camera)
 
+    # Start behind the hero without camera dragging.
+    camera_yaw = rotation.y
+    camera_yaw_target = rotation.y
     camera_pitch_current = camera_pitch
     camera_pitch_target = camera_pitch
+
+    camera_rig.global_position = global_position
+    _update_camera_position()
 
     _make_touch_controls()
 
@@ -205,6 +214,7 @@ func _physics_process(delta: float) -> void:
         velocity = Vector3.ZERO
         return
 
+    # Read keyboard/gamepad actions and the touch joystick.
     var input_dir := Vector2(
         Input.get_action_strength("move_right")
         - Input.get_action_strength("move_left"),
@@ -217,7 +227,7 @@ func _physics_process(delta: float) -> void:
     if input_dir.length_squared() > 1.0:
         input_dir = input_dir.normalized()
 
-    # Movement follows the camera's horizontal direction.
+    # Move relative to the camera's horizontal direction.
     var yaw_basis := Basis(Vector3.UP, camera_yaw)
     var camera_forward := -yaw_basis.z
     var camera_right := yaw_basis.x
@@ -230,6 +240,7 @@ func _physics_process(delta: float) -> void:
     if direction.length_squared() > 1.0:
         direction = direction.normalized()
 
+    # Smooth acceleration and stopping.
     var horizontal_velocity := Vector2(
         velocity.x, velocity.z
     )
@@ -244,7 +255,7 @@ func _physics_process(delta: float) -> void:
     if direction.length_squared() > 0.001:
         movement_rate = acceleration
 
-        # Face the direction of travel smoothly.
+        # Smoothly face the direction of movement.
         var target_yaw := atan2(
             -direction.x, -direction.z
         )
@@ -274,12 +285,11 @@ func _process(delta: float) -> void:
     if not is_instance_valid(camera_rig):
         return
 
-    # Follow the hero while allowing the player to orbit the camera.
-    var target_yaw := rotation.y + camera_yaw_offset
-    var weight := 1.0 - exp(-camera_follow_speed * delta)
+    # Smooth camera orbit independently of hero turning.
+    var weight := 1.0 - exp(-6.0 * delta)
 
     camera_yaw = lerp_angle(
-        camera_yaw, target_yaw, weight
+        camera_yaw, camera_yaw_target, weight
     )
 
     camera_pitch_current = lerpf(
@@ -288,18 +298,32 @@ func _process(delta: float) -> void:
         weight
     )
 
-    camera_rig.global_position = camera_rig.global_position.lerp(
-        global_position, weight
+    # Smoothly follow the hero's position.
+    camera_rig.global_position = (
+        camera_rig.global_position.lerp(
+            global_position,
+            1.0 - exp(-camera_follow_speed * delta)
+        )
     )
 
+    _update_camera_position()
+
+
+func _update_camera_position() -> void:
+    if not is_instance_valid(camera):
+        return
+
     var pitch_radians := deg_to_rad(camera_pitch_current)
+
     var horizontal_distance := (
         camera_distance * cos(pitch_radians)
     )
+
     var vertical_distance := (
         camera_distance * sin(pitch_radians)
     )
 
+    # Positive Z is behind the hero at zero camera yaw.
     var offset := Vector3(
         sin(camera_yaw) * horizontal_distance,
         vertical_distance,
@@ -318,14 +342,13 @@ func _process(delta: float) -> void:
     camera.look_at(look_target, Vector3.UP)
 
 
-var camera_yaw_offset := 0.0
-
-
 func rotate_camera(movement: Vector2) -> void:
-    camera_yaw_offset -= (
+    # Horizontal swipe rotates the view around the hero.
+    camera_yaw_target -= (
         movement.x * camera_swipe_sensitivity
     )
 
+    # Vertical swipe adjusts the viewing angle.
     camera_pitch_target = clampf(
         camera_pitch_target
         + movement.y * camera_swipe_sensitivity * 50.0,
@@ -388,7 +411,7 @@ func _make_touch_controls() -> void:
     layer.layer = 5
     add_child(layer)
 
-    # Left side: movement joystick.
+    # Left half: movement joystick.
     var joystick := VirtualJoystick.new()
     joystick.name = "MovementJoystick"
     joystick.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -402,16 +425,19 @@ func _make_touch_controls() -> void:
 
     layer.add_child(joystick)
 
-    # Right side: swipe to rotate camera.
+    # Right half: optional swipe-to-rotate camera.
     var swipe_area := CameraSwipeArea.new()
     swipe_area.name = "CameraSwipeArea"
     swipe_area.player = self
+
     swipe_area.anchor_left = 0.5
     swipe_area.anchor_right = 1.0
     swipe_area.anchor_top = 0.0
     swipe_area.anchor_bottom = 1.0
+
     swipe_area.offset_left = 0.0
     swipe_area.offset_right = 0.0
     swipe_area.offset_top = 0.0
     swipe_area.offset_bottom = 0.0
+
     layer.add_child(swipe_area)
