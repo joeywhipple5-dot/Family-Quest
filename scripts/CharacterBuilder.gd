@@ -27,6 +27,7 @@ func build_character(hero_class_name: String, gender: String = "male") -> Node3D
         var warrior_scene := load("res://hollow-warden (1).glb") as PackedScene
         if warrior_scene != null:
             var warrior_model := warrior_scene.instantiate()
+warrior_model.scale = Vector3(3.0, 3.0, 3.0)
             warrior_model.name = "WarriorModel"
             root.add_child(warrior_model)
             return root
