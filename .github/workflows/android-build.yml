@@ -17,6 +17,13 @@ jobs:
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
+        
+      - name: Setup Godot Android environment
+        run: |
+          mkdir -p "$HOME/.config" "$HOME/.local/share/godot/export_templates"
+          cp -a /root/.config/godot "$HOME/.config/"
+          cp -a /root/.local/share/godot/export_templates/4.3.stable "$HOME/.local/share/godot/export_templates/"
+
 
       - name: Import Godot project
         run: godot --headless --editor --path . --quit
