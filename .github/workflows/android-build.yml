@@ -19,24 +19,17 @@ jobs:
         uses: actions/checkout@v4
         
       
+      
       - name: Setup Godot Android environment
         run: |
           mkdir -p "$HOME/.config/godot"
-          cp -a /root/.config/godot/. "$HOME/.config/godot/"
-          cat >> "$HOME/.config/godot/editor_settings-4.3.tres" <<'EOF'
-          [resource]
-          export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"
-          export/android/android_sdk_path = "/usr/lib/android-sdk"
-          export/android/adb = "/usr/bin/adb"
-          export/android/jarsigner = "/usr/bin/jarsigner"
-          export/android/debug_keystore = "/root/debug.keystore"
-          export/android/debug_keystore_user = "androiddebugkey"
-          export/android/debug_keystore_pass = "android"
-          export/android/force_system_user = false
-          export/android/shutdown_adb_on_exit = true
-          EOF
+          cp /root/.config/godot/editor_settings-4.3.tres "$HOME/.config/godot/"
           mkdir -p "$HOME/.local/share/godot/export_templates"
           cp -a /root/.local/share/godot/export_templates/4.3.stable "$HOME/.local/share/godot/export_templates/"
+          test -f /root/debug.keystore
+          test -d /usr/lib/android-sdk
+          test -d /usr/lib/jvm/java-17-openjdk-amd64
+
 
 
 
