@@ -137,12 +137,19 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
     # Read the existing touchscreen and keyboard actions.
-    var input_dir := Vector2(
-        Input.get_action_strength("move_right")
-        - Input.get_action_strength("move_left"),
-        Input.get_action_strength("move_back")
-        - Input.get_action_strength("move_forward")
-    )
+    
+var input_dir := Vector2(
+    Input.get_action_strength("move_right")
+    - Input.get_action_strength("move_left"),
+    Input.get_action_strength("move_back")
+    - Input.get_action_strength("move_forward")
+)
+
+input_dir += joystick_input
+
+if input_dir.length_squared() > 1.0:
+    input_dir = input_dir.normalized()
+
 
     # Prevent diagonal movement from being faster.
     if input_dir.length_squared() > 1.0:
