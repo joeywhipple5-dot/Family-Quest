@@ -166,6 +166,7 @@ func _build_menu() -> void:
     add_child(message_dialog)
 
 
+
 func _add_menu_button(
     parent: VBoxContainer,
     label_text: String,
@@ -174,43 +175,62 @@ func _add_menu_button(
 ) -> void:
     var button := Button.new()
     button.text = label_text
-    button.custom_minimum_size = Vector2(0, 50)
+    button.custom_minimum_size = Vector2(0, 52)
     button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     button.focus_mode = Control.FOCUS_ALL
+    button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
     button.add_theme_font_size_override("font_size", 17)
     button.add_theme_color_override("font_color", PALE)
     button.add_theme_color_override("font_hover_color", GOLD)
     button.add_theme_color_override("font_pressed_color", GOLD)
+    button.add_theme_color_override("font_focus_color", GOLD)
 
+    # Normal button appearance
     var normal := StyleBoxFlat.new()
-    normal.bg_color = Color("#315B85") if primary else PANEL
-    normal.border_color = GOLD if primary else Color("#3B4C62")
+    normal.bg_color = Color("#17263B")
+    normal.border_color = Color("#536984")
     normal.set_border_width_all(1)
     normal.set_corner_radius_all(9)
     normal.content_margin_left = 16
     normal.content_margin_right = 16
     normal.content_margin_top = 10
     normal.content_margin_bottom = 10
+
+    # Highlight the Play button
+    if primary:
+        normal.bg_color = Color("#28517A")
+        normal.border_color = GOLD
+        normal.set_border_width_all(2)
+
     button.add_theme_stylebox_override("normal", normal)
 
+    # Hover appearance
     var hover := normal.duplicate() as StyleBoxFlat
-    hover.bg_color = PANEL_HOVER
+    hover.bg_color = Color("#315F88") if primary else Color("#243B56")
     hover.border_color = GOLD
+    hover.set_border_width_all(2)
+    hover.shadow_color = Color(0.15, 0.45, 0.85, 0.28)
+    hover.shadow_size = 5
     button.add_theme_stylebox_override("hover", hover)
 
+    # Pressed appearance
     var pressed := normal.duplicate() as StyleBoxFlat
-    pressed.bg_color = Color("#203A55")
+    pressed.bg_color = Color("#17334D")
+    pressed.border_color = GOLD
+    pressed.set_border_width_all(2)
+    pressed.shadow_size = 0
     button.add_theme_stylebox_override("pressed", pressed)
+
+    # Keyboard focus appearance
+    var focused := normal.duplicate() as StyleBoxFlat
+    focused.border_color = GOLD
+    focused.set_border_width_all(2)
+    button.add_theme_stylebox_override("focus", focused)
 
     button.pressed.connect(callback)
     parent.add_child(button)
     button_nodes.append(button)
-
-
-# ------------------------------------------------------
-# BUTTON ACTIONS
-# ------------------------------------------------------
 
 func _on_play_pressed() -> void:
     if (
