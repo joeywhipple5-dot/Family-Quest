@@ -33,6 +33,21 @@ jobs:
           grep -q 'export/android/debug_keystore_pass' "$SETTINGS" || echo 'export/android/debug_keystore_pass = "android"' >> "$SETTINGS"
           cp -a /root/.local/share/godot/export_templates/4.3.stable "$HOME/.local/share/godot/export_templates/"
 
+      - name: Diagnose Android build tools
+        run: |
+          echo "=== HOME ==="
+          echo "$HOME"
+          echo "=== Godot settings ==="
+          cat "$HOME/.config/godot/editor_settings-4.3.tres"
+          echo "=== Java ==="
+          ls -ld /usr/lib/jvm/java-17-openjdk-amd64 || true
+          echo "=== Android SDK ==="
+          ls -ld /usr/lib/android-sdk /usr/lib/android-sdk/build-tools/33.0.2 || true
+          echo "=== Debug keystore ==="
+          ls -l /root/debug.keystore || true
+          echo "=== Export templates ==="
+          ls -l "$HOME/.local/share/godot/export_templates/4.3.stable" || true
+
 
 
 
