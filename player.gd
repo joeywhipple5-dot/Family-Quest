@@ -29,7 +29,7 @@ var joystick_knob: Control
 
 
 func _ready() -> void:
-    # Visible temporary hero. CharacterBuilder can be restored later.
+    # Temporary visible hero
     var body_mesh := MeshInstance3D.new()
     body_mesh.name = "TemporaryHeroVisual"
 
@@ -44,10 +44,8 @@ func _ready() -> void:
     body_mesh.material_override = body_material
     add_child(body_mesh)
 
-    # Collision shape for the hero.
+    # Collision
     var collision := CollisionShape3D.new()
-    collision.name = "PlayerCollision"
-
     var capsule_shape := CapsuleShape3D.new()
     capsule_shape.radius = 0.45
     capsule_shape.height = 1.8
@@ -55,23 +53,21 @@ func _ready() -> void:
     collision.position.y = 0.9
     add_child(collision)
 
-    # Create a camera attached to the player.
-    var camera_pivot := Node3D.new()
-    camera_pivot.name = "CameraPivot"
-    camera_pivot.position = Vector3(0, camera_height, 0)
-    add_child(camera_pivot)
+    # Camera pivot
+    var pivot := Node3D.new()
+    pivot.name = "CameraPivot"
+    pivot.position = Vector3(0, camera_height, 0)
+    add_child(pivot)
 
     game_camera = Camera3D.new()
     game_camera.name = "GameCamera"
-    game_camera.position = Vector3(0, 0, camera_distance)
-    game_camera.current = true
-    camera_pivot.add_child(game_camera)
+    pivot.add_child(game_camera)
 
     _update_camera()
     _create_touch_controls()
 
 
-
+func _physics_process(delta: float) -> void:
     var input_vector := Input.get_vector(
         "move_left",
         "move_right",
@@ -82,11 +78,13 @@ func _ready() -> void:
     if joystick_active:
         input_vector = joystick_vector
 
+    # Camera-relative movement
     var forward := -game_camera.global_basis.z
     var right := game_camera.global_basis.x
 
     forward.y = 0.0
     right.y = 0.0
+
     forward = forward.normalized()
     right = right.normalized()
 
@@ -99,40 +97,6 @@ func _ready() -> void:
     velocity.x = move_direction.x * move_speed
     velocity.z = move_direction.z * move_speed
 
-    if not is_on_floor():
-        velocity.y -= gravity * delta
-    elif velocity.y < 0.0:
-        velocity.y = 0.0
-
-    move_and_slide()
-
-
-    var input_vector := keyboard_input
-
-    # Mobile joystick overrides keyboard only when being used.
-    if joystick_active:
-        input_vector = joystick_vector
-
-    # Movement follows the direction the camera is facing.
-    var forward := -global_basis.z
-    var right := global_basis.x
-
-    # Remove vertical components so slopes do not change the direction.
-    forward.y = 0.0
-    right.y = 0.0
-    forward = forward.normalized()
-    right = right.normalized()
-
-    var move_direction := right * input_vector.x
-    move_direction += forward * -input_vector.y
-
-    if move_direction.length_squared() > 1.0:
-        move_direction = move_direction.normalized()
-
-    velocity.x = move_direction.x * move_speed
-    velocity.z = move_direction.z * move_speed
-
-    # Gravity and ground movement.
     if not is_on_floor():
         velocity.y -= gravity * delta
     elif velocity.y < 0.0:
@@ -146,7 +110,6 @@ func _create_touch_controls() -> void:
     layer.name = "PlayerTouchControls"
     add_child(layer)
 
-    # Left-side joystick base.
     joystick_base = Control.new()
     joystick_base.name = "JoystickBase"
     joystick_base.anchor_left = 0.0
@@ -170,7 +133,6 @@ func _create_touch_controls() -> void:
     base_panel.add_theme_stylebox_override("panel", base_style)
     joystick_base.add_child(base_panel)
 
-    # Joystick knob.
     joystick_knob = Control.new()
     joystick_knob.name = "JoystickKnob"
     joystick_knob.position = Vector2(40, 40)
@@ -199,7 +161,6 @@ func _input(event: InputEvent) -> void:
     elif event is InputEventScreenDrag:
         _handle_touch_drag(event.index, event.position)
 
-    # Optional mouse support for desktop testing.
     elif event is InputEventMouseButton:
         if event.button_index == MOUSE_BUTTON_LEFT:
             if event.pressed:
@@ -215,21 +176,18 @@ func _input(event: InputEvent) -> void:
 func _handle_touch_start(pointer_id: int, position: Vector2) -> void:
     var screen_size := get_viewport().get_visible_rect().size
 
-    # Start joystick when touching the lower-left control area.
-    if pointer_id != camera_pointer and position.x < screen_size.x * 0.42:
+    if position.x < screen_size.x * 0.42:
         if not joystick_active and joystick_pointer == -1:
-            var base_center := joystick_base.global_position + joystick_base.size * 0.5
-            var touch_distance := position.distance_to(base_center)
+            var center := joystick_base.global_position + joystick_base.size * 0.5
 
-            if touch_distance < 115.0:
+            if position.distance_to(center) < 115.0:
                 joystick_active = true
                 joystick_pointer = pointer_id
-                joystick_origin = base_center
+                joystick_origin = center
                 _update_joystick(position)
                 return
 
-    # Right half of the screen controls camera rotation.
-    if position.x >= screen_size.x * 0.42 and camera_pointer == -1:
+    elif camera_pointer == -1:
         camera_pointer = pointer_id
         camera_last_position = position
 
@@ -243,8 +201,11 @@ func _handle_touch_drag(pointer_id: int, position: Vector2) -> void:
         camera_last_position = position
 
         camera_yaw -= drag_delta.x * camera_sensitivity
-        camera_pitch -= drag_delta.y * camera_sensitivity
-        camera_pitch = clampf(camera_pitch, -0.65, 0.35)
+        camera_pitch = clampf(
+            camera_pitch - drag_delta.y * camera_sensitivity,
+            -0.45,
+            0.35
+        )
 
         _update_camera()
 
@@ -271,7 +232,6 @@ func _update_joystick(touch_position: Vector2) -> void:
     joystick_knob.position = Vector2(40, 40) + difference
 
 
-
 func _update_camera() -> void:
     if not is_instance_valid(game_camera):
         return
@@ -285,7 +245,5 @@ func _update_camera() -> void:
 
     game_camera.position = Vector3(0, 0, camera_distance)
     game_camera.rotation = Vector3.ZERO
-    game_camera.look_at(
-        pivot.to_global(Vector3(0, 0.8, 0)),
-        Vector3.UP
-    )
+    game_camera.look_at(Vector3.ZERO, Vector3.UP)
+    game_camera.current = true
