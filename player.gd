@@ -85,48 +85,6 @@ class VirtualJoystick extends Control:
         )
 
 
-class CameraDragArea extends Control:
-    var player: CharacterBody3D
-    var dragging := false
-    var last_position := Vector2.ZERO
-
-    const SENSITIVITY := 0.008
-
-    func _ready() -> void:
-        mouse_filter = Control.MOUSE_FILTER_STOP
-
-    func _gui_input(event: InputEvent) -> void:
-        if event is InputEventScreenTouch:
-            if event.pressed:
-                dragging = true
-                last_position = event.position
-            else:
-                dragging = false
-            accept_event()
-
-        elif event is InputEventScreenDrag and dragging:
-            _rotate_camera(event.position)
-            accept_event()
-
-        elif event is InputEventMouseButton:
-            if event.button_index == MOUSE_BUTTON_LEFT:
-                dragging = event.pressed
-                last_position = event.position
-                accept_event()
-
-        elif event is InputEventMouseMotion and dragging:
-            _rotate_camera(event.position)
-            accept_event()
-
-    func _rotate_camera(pos: Vector2) -> void:
-        if player == null or player.dead:
-            return
-
-        var movement := pos - last_position
-        last_position = pos
-        player.rotate_camera(movement.x)
-
-
 var hero_class := "Warrior"
 var hero_gender := "male"
 
@@ -138,15 +96,19 @@ var invulnerable := false
 @export var speed := 7.0
 @export var acceleration := 18.0
 @export var braking := 24.0
-@export var turn_speed := 10.0
+@export var turn_speed := 8.0
 
-@export var camera_sensitivity := 0.008
+@export var camera_follow_speed := 5.0
+@export var camera_distance := 6.0
+@export var camera_height := 3.0
+@export var camera_look_height := 1.2
 @export var respawn_delay := 2.0
 
 var gravity := 20.0
-var camera_pivot: Node3D
+var camera: Camera3D
 var joystick_input := Vector2.ZERO
 var spawn_position := Vector3(0, 1, 4)
+var camera_offset := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -169,17 +131,41 @@ func _ready() -> void:
     character_model.name = "VisibleHeroModel"
     add_child(character_model)
 
-    camera_pivot = Node3D.new()
-    camera_pivot.position = Vector3(0, 1.3, 0)
-    add_child(camera_pivot)
-
-    var camera := Camera3D.new()
-    camera.position = Vector3(0, 4.2, 7.5)
-    camera.rotation_degrees = Vector3(-22, 0, 0)
+    # Camera is independent of player rotation.
+    # This prevents sudden camera spins when the hero turns.
+    camera = Camera3D.new()
+    camera.name = "FollowCamera"
+    camera.position = Vector3.ZERO
     camera.current = true
-    camera_pivot.add_child(camera)
+    get_tree().root.add_child.call_deferred(camera)
+
+    camera_offset = Vector3(0, camera_height, camera_distance)
 
     _make_touch_controls()
+
+
+func _process(delta: float) -> void:
+    if not is_instance_valid(camera):
+        return
+
+    # Follow behind the direction the hero faces.
+    var behind := global_transform.basis.z.normalized()
+    var target_position := global_position
+    target_position += Vector3.UP * camera_height
+    target_position += behind * camera_distance
+
+    var follow_weight := 1.0 - exp(
+        -camera_follow_speed * delta
+    )
+
+    camera.global_position = camera.global_position.lerp(
+        target_position, follow_weight
+    )
+
+    var look_target := global_position
+    look_target.y += camera_look_height
+
+    camera.look_at(look_target, Vector3.UP)
 
 
 func _physics_process(delta: float) -> void:
@@ -199,20 +185,22 @@ func _physics_process(delta: float) -> void:
     if input_dir.length_squared() > 1.0:
         input_dir = input_dir.normalized()
 
-    # Convert movement into camera-relative directions.
-    var camera_basis := camera_pivot.global_transform.basis
-    var camera_forward := -camera_basis.z
-    var camera_right := camera_basis.x
+    # Movement is relative to the hero's facing direction.
+    var forward := -global_transform.basis.z
+    var right := global_transform.basis.x
 
-    camera_forward.y = 0.0
-    camera_right.y = 0.0
-    camera_forward = camera_forward.normalized()
-    camera_right = camera_right.normalized()
+    forward.y = 0.0
+    right.y = 0.0
+    forward = forward.normalized()
+    right = right.normalized()
 
     var direction := (
-        camera_right * input_dir.x
-        + camera_forward * -input_dir.y
-    ).normalized()
+        right * input_dir.x
+        + forward * -input_dir.y
+    )
+
+    if direction.length_squared() > 1.0:
+        direction = direction.normalized()
 
     var horizontal_velocity := Vector2(
         velocity.x, velocity.z
@@ -227,20 +215,23 @@ func _physics_process(delta: float) -> void:
     if direction.length_squared() > 0.001:
         movement_rate = acceleration
 
+        # Turn smoothly toward the movement direction.
+        var target_yaw := atan2(
+            -direction.x, -direction.z
+        )
+
+        rotation.y = lerp_angle(
+            rotation.y,
+            target_yaw,
+            minf(turn_speed * delta, 1.0)
+        )
+
     horizontal_velocity = horizontal_velocity.move_toward(
         target_velocity, movement_rate * delta
     )
 
     velocity.x = horizontal_velocity.x
     velocity.z = horizontal_velocity.y
-
-    if direction.length_squared() > 0.001:
-        var target_yaw := atan2(-direction.x, -direction.z)
-        rotation.y = lerp_angle(
-            rotation.y,
-            target_yaw,
-            minf(turn_speed * delta, 1.0)
-        )
 
     if not is_on_floor():
         velocity.y -= gravity * delta
@@ -250,22 +241,13 @@ func _physics_process(delta: float) -> void:
     move_and_slide()
 
 
-func rotate_camera(horizontal_drag: float) -> void:
-    if camera_pivot == null:
-        return
-
-    camera_pivot.rotation.y -= (
-        horizontal_drag * camera_sensitivity
-    )
-
-
 func take_damage(amount: int) -> void:
     if dead or invulnerable or amount <= 0:
         return
 
     hp = maxi(hp - amount, 0)
 
-    if hp <= 0:
+    if hp == 0:
         _die()
 
 
@@ -313,22 +295,6 @@ func _make_touch_controls() -> void:
     layer.layer = 5
     add_child(layer)
 
-    # Right half of the screen rotates the camera.
-    var camera_drag := CameraDragArea.new()
-    camera_drag.name = "CameraDragArea"
-    camera_drag.player = self
-    camera_drag.set_anchors_preset(Control.PRESET_FULL_RECT)
-    camera_drag.anchor_left = 0.5
-    camera_drag.anchor_right = 1.0
-    camera_drag.anchor_top = 0.0
-    camera_drag.anchor_bottom = 1.0
-    camera_drag.offset_left = 0.0
-    camera_drag.offset_right = 0.0
-    camera_drag.offset_top = 0.0
-    camera_drag.offset_bottom = 0.0
-    layer.add_child(camera_drag)
-
-    # Left joystick stays above the camera drag area.
     var joystick := VirtualJoystick.new()
     joystick.name = "MovementJoystick"
     joystick.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
