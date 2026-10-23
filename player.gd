@@ -1,6 +1,95 @@
 
 extends CharacterBody3D
 
+class VirtualJoystick extends Control:
+    signal value_changed(value: Vector2)
+
+    var input_vector := Vector2.ZERO
+    var tracking := false
+    var knob_position := Vector2.ZERO
+
+    const RADIUS := 78.0
+    const KNOB_RADIUS := 30.0
+    const DEADZONE := 0.12
+
+    func _ready() -> void:
+        custom_minimum_size = Vector2(180, 180)
+        mouse_filter = Control.MOUSE_FILTER_STOP
+        queue_redraw()
+
+    func _gui_input(event: InputEvent) -> void:
+        if event is InputEventScreenTouch:
+            if event.pressed:
+                tracking = true
+                _update_stick(event.position)
+            else:
+                tracking = false
+                _reset_stick()
+            accept_event()
+
+        elif event is InputEventScreenDrag:
+            if tracking:
+                _update_stick(event.position)
+            accept_event()
+
+        elif event is InputEventMouseButton:
+            if event.button_index == MOUSE_BUTTON_LEFT:
+                tracking = event.pressed
+                if tracking:
+                    _update_stick(event.position)
+                else:
+                    _reset_stick()
+                accept_event()
+
+        elif event is InputEventMouseMotion and tracking:
+            _update_stick(event.position)
+            accept_event()
+
+    func _update_stick(pos: Vector2) -> void:
+        var center := size / 2.0
+        var offset := pos - center
+
+        if offset.length() > RADIUS:
+            offset = offset.normalized() * RADIUS
+
+        knob_position = offset
+        input_vector = offset / RADIUS
+
+        if input_vector.length() < DEADZONE:
+            input_vector = Vector2.ZERO
+
+        value_changed.emit(input_vector)
+        queue_redraw()
+
+    func _reset_stick() -> void:
+        tracking = false
+        input_vector = Vector2.ZERO
+        knob_position = Vector2.ZERO
+        value_changed.emit(input_vector)
+        queue_redraw()
+
+    func _draw() -> void:
+        var center := size / 2.0
+
+        draw_circle(
+            center, RADIUS,
+            Color(0.08, 0.10, 0.13, 0.65)
+        )
+        draw_arc(
+            center, RADIUS, 0, TAU, 48,
+            Color(0.75, 0.80, 0.85, 0.9), 3.0
+        )
+        draw_circle(
+            center + knob_position,
+            KNOB_RADIUS,
+            Color(0.35, 0.65, 0.95, 0.95)
+        )
+        draw_arc(
+            center + knob_position, KNOB_RADIUS,
+            0, TAU, 32,
+            Color(1, 1, 1, 0.95), 2.0
+        )
+
 var hero_class := "Warrior"
 var hero_gender := "male"
 var hp := 100
