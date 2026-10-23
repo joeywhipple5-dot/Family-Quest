@@ -153,7 +153,7 @@ func _create_touch_controls() -> void:
 
 func _input(event: InputEvent) -> void:
     if event is InputEventScreenTouch:
-        if event.pressed:
+        if event.pressed:1
             _handle_touch_start(event.index, event.position)
         else:
             _handle_touch_end(event.index)
@@ -238,21 +238,29 @@ func _update_joystick(touch_position: Vector2) -> void:
 
 
 
+
 func _update_camera() -> void:
     if not is_instance_valid(game_camera):
         return
 
-    var pivot := game_camera.get_parent() as Node3D
-    if pivot == null:
-        return
+    # Aim at a point above the hero.
+    var target := global_position + Vector3(0.0, 1.2, 0.0)
 
-    # Pivot stays attached to the character.
-    pivot.position = Vector3(0, camera_height, 0)
-    pivot.rotation = Vector3(camera_pitch, camera_yaw, 0)
+    # Calculate the camera orbit using yaw and pitch.
+    var horizontal_distance := camera_distance * cos(camera_pitch)
+    var vertical_distance := camera_distance * sin(camera_pitch)
 
-    # Camera stays behind the pivot at a fixed distance.
-    game_camera.position = Vector3(0, 0, camera_distance)
-    game_camera.rotation = Vector3.ZERO
-    game_camera.look_at(Vector3.ZERO, Vector3.UP)
+    var offset := Vector3(
+        sin(camera_yaw) * horizontal_distance,
+        vertical_distance,
+        cos(camera_yaw) * horizontal_distance
+    )
+
+    # Set the camera's world position directly.
+    game_camera.global_position = target + offset
+
+    # Always face the hero.
+    game_camera.look_at(target, Vector3.UP)
     game_camera.current = true
+
 
