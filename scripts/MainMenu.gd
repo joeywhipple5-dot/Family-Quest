@@ -94,38 +94,25 @@ func _build_menu() -> void:
     content.add_theme_constant_override("separation", 12)
     add_child(content)
 
-    # Decorative emblem
-    var top_spacer := Control.new()
-    top_spacer.custom_minimum_size.y = 6
-    content.add_child(top_spacer)
+    
+    # Family Quest crest
+    var crest_texture := load(
+        "res://artwork/family_quest_crest.png"
+    ) as Texture2D
 
-    var emblem := Label.new()
-    emblem.text = "✦"
-    emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    emblem.add_theme_font_size_override("font_size", 30)
-    emblem.add_theme_color_override("font_color", GOLD)
-    content.add_child(emblem)
+    if crest_texture != null:
+        var crest := TextureRect.new()
+        crest.name = "FamilyQuestCrest"
+        crest.texture = crest_texture
+        crest.custom_minimum_size = Vector2(0, 190)
+        crest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        crest.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+        crest.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+        crest.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        content.add_child(crest)
+    else:
+        push_warning("Family Quest crest failed to load.")
 
-    # Game title
-    var title_family := Label.new()
-    title_family.text = "FAMILY"
-    title_family.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    title_family.add_theme_font_size_override("font_size", 42)
-    title_family.add_theme_color_override("font_color", GOLD)
-    title_family.add_theme_color_override(
-        "font_shadow_color",
-        Color(0, 0, 0, 0.75)
-    )
-    title_family.add_theme_constant_override("shadow_offset_x", 2)
-    title_family.add_theme_constant_override("shadow_offset_y", 3)
-    content.add_child(title_family)
-
-    var title_quest := Label.new()
-    title_quest.text = "QUEST"
-    title_quest.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    title_quest.add_theme_font_size_override("font_size", 42)
-    title_quest.add_theme_color_override("font_color", PALE)
-    content.add_child(title_quest)
 
     var subtitle := Label.new()
     subtitle.text = "ONE FAMILY. ONE ADVENTURE."
