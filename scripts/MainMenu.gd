@@ -237,7 +237,6 @@ func _build_menu() -> void:
     add_child(glow)
 
     # Existing menu content and navigation remain below
-    var content := VBoxContainer.new()
 
     var content := VBoxContainer.new()
     content.name = "MenuContent"
