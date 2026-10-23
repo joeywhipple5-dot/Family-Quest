@@ -22,16 +22,6 @@ func build_character(hero_class_name: String, gender: String = "male") -> Node3D
     var root := Node3D.new()
     root.name = "%s_%s" % [hero_class_name, gender.capitalize()]
 
-    # Use the imported 3D model for the Warrior.
-        if hero_class_name == "Warrior":
-        var warrior_scene = load("res://hollow-warden (1).glb") as PackedScene
-        if warrior_scene != null:
-            var warrior_model = warrior_scene.instantiate()
-            warrior_model.name = "WarriorModel"
-            warrior_model.scale = Vector3(1.5, 1.5, 1.5)
-            root.add_child(warrior_model)
-            return root
-
     var cloth: Color = PALETTES.get(
         hero_class_name, Color("#6A8C9B")
     )
@@ -115,7 +105,7 @@ func build_character(hero_class_name: String, gender: String = "male") -> Node3D
         Vector3(0.30, 0.045, 0.025), trim
     ))
 
-    # FACE, HAIR AND CLASS HOOD
+    # FACE AND HAIR
     var hair := Color("#49301F")
     if female:
         root.add_child(_capsule(
@@ -132,7 +122,7 @@ func build_character(hero_class_name: String, gender: String = "male") -> Node3D
             Vector3(0.28, 0.12, 0.27), hair
         ))
 
-    # CLASS-SPECIFIC ARMOR AND EQUIPMENT
+    # CLASS-SPECIFIC EQUIPMENT
     match hero_class_name:
         "Warrior":
             _warrior_gear(root, cloth)
