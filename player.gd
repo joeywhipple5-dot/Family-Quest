@@ -1,5 +1,6 @@
 extends CharacterBody3D
-var hero_class := "Warrior"\nvar hero_gender := "male"
+var hero_class := "Warrior"
+var hero_gender := "male"
 var hp := 100
 var speed := 7.0
 var gravity := 20.0
