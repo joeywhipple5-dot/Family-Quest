@@ -160,59 +160,22 @@ func _ready() -> void:
 
 
 func _build_menu() -> void:
-    # Full-screen fantasy background
-    var background := ColorRect.new()
-    background.name = "Background"
-    background.color = Color("#0A1222")
+    
+    # Full-screen moonlit village scenery
+    var background := TextureRect.new()
+    background.name = "FantasyBackground"
     background.set_anchors_and_offsets_preset(
         Control.PRESET_FULL_RECT
     )
+    background.texture = load(
+        "res://artwork/menu_background.png"
+    )
+    background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
     background.mouse_filter = Control.MOUSE_FILTER_IGNORE
     add_child(background)
 
-    # Distant landscape
-    var horizon := ColorRect.new()
-    horizon.name = "FantasyHorizon"
-    horizon.color = Color("#182D3B")
-    horizon.anchor_left = 0.0
-    horizon.anchor_right = 1.0
-    horizon.anchor_top = 0.56
-    horizon.anchor_bottom = 1.0
-    horizon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    add_child(horizon)
 
-    # Atmospheric moon and stars
-    var sky_art := Label.new()
-    sky_art.name = "FantasySky"
-    sky_art.text = "✦     ·       ✧      ·      ☾      ·       ✦"
-    sky_art.add_theme_font_size_override("font_size", 30)
-    sky_art.add_theme_color_override(
-        "font_color", Color("#D9C18A")
-    )
-    sky_art.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    sky_art.anchor_left = 0.0
-    sky_art.anchor_right = 1.0
-    sky_art.anchor_top = 0.10
-    sky_art.anchor_bottom = 0.22
-    sky_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    add_child(sky_art)
-
-    # Castle silhouette
-    var castle := Label.new()
-    castle.name = "CastleSilhouette"
-    castle.text = "♜       ♜       ♜"
-    castle.add_theme_font_size_override("font_size", 64)
-    castle.add_theme_color_override(
-        "font_color", Color("#263D4A")
-    )
-    castle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    castle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-    castle.anchor_left = 0.0
-    castle.anchor_right = 1.0
-    castle.anchor_top = 0.52
-    castle.anchor_bottom = 0.78
-    castle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    add_child(castle)
 
     # Gold-framed menu panel
     var glow := Panel.new()
