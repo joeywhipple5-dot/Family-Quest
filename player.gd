@@ -200,7 +200,10 @@ func _handle_touch_drag(pointer_id: int, position: Vector2) -> void:
         var drag_delta := position - camera_last_position
         camera_last_position = position
 
+        # Horizontal swipe orbits around the hero.
         camera_yaw -= drag_delta.x * camera_sensitivity
+
+        # Vertical swipe changes the viewing angle, within limits.
         camera_pitch = clampf(
             camera_pitch - drag_delta.y * camera_sensitivity,
             -0.45,
@@ -208,6 +211,8 @@ func _handle_touch_drag(pointer_id: int, position: Vector2) -> void:
         )
 
         _update_camera()
+
+
 
 
 func _handle_touch_end(pointer_id: int) -> void:
@@ -232,6 +237,7 @@ func _update_joystick(touch_position: Vector2) -> void:
     joystick_knob.position = Vector2(40, 40) + difference
 
 
+
 func _update_camera() -> void:
     if not is_instance_valid(game_camera):
         return
@@ -240,10 +246,13 @@ func _update_camera() -> void:
     if pivot == null:
         return
 
+    # Pivot stays attached to the character.
     pivot.position = Vector3(0, camera_height, 0)
     pivot.rotation = Vector3(camera_pitch, camera_yaw, 0)
 
+    # Camera stays behind the pivot at a fixed distance.
     game_camera.position = Vector3(0, 0, camera_distance)
     game_camera.rotation = Vector3.ZERO
     game_camera.look_at(Vector3.ZERO, Vector3.UP)
     game_camera.current = true
+
