@@ -23,12 +23,12 @@ func build_character(hero_class_name: String, gender: String = "male") -> Node3D
     root.name = "%s_%s" % [hero_class_name, gender.capitalize()]
 
     # Use the imported 3D model for the Warrior.
-    if hero_class_name == "Warrior":
-        var warrior_scene := load("res://hollow-warden (1).glb") as PackedScene
+        if hero_class_name == "Warrior":
+        var warrior_scene = load("res://hollow-warden (1).glb") as PackedScene
         if warrior_scene != null:
-            var warrior_model := warrior_scene.instantiate()
-warrior_model.scale = Vector3(3.0, 3.0, 3.0)
+            var warrior_model = warrior_scene.instantiate()
             warrior_model.name = "WarriorModel"
+            warrior_model.scale = Vector3(1.5, 1.5, 1.5)
             root.add_child(warrior_model)
             return root
 
