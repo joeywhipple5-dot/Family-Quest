@@ -69,10 +69,18 @@ jobs:
       - name: Import Godot project
         run: godot --headless --editor --path . --quit
 
+      
+
       - name: Build Android APK
         run: |
+          echo "=== Installed Android platforms ==="
+          ls -la /usr/lib/android-sdk/platforms/ || true
+          echo "=== Android SDK packages ==="
+          ls -la /usr/lib/android-sdk/build-tools/ || true
+          echo "=== Export preset ==="
+          cat export_presets.cfg
           mkdir -p build
-          godot --headless --path . --export-debug "Android" build/FamilyQuest.apk
+          godot --headless --verbose --path . --export-debug "Android" build/FamilyQuest.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
