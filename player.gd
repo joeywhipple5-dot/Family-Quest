@@ -71,14 +71,41 @@ func _ready() -> void:
     _create_touch_controls()
 
 
-func _physics_process(delta: float) -> void:
-    # Keyboard controls also work when available.
-    var keyboard_input := Input.get_vector(
+
+    var input_vector := Input.get_vector(
         "move_left",
         "move_right",
         "move_forward",
         "move_back"
     )
+
+    if joystick_active:
+        input_vector = joystick_vector
+
+    var forward := -game_camera.global_basis.z
+    var right := game_camera.global_basis.x
+
+    forward.y = 0.0
+    right.y = 0.0
+    forward = forward.normalized()
+    right = right.normalized()
+
+    var move_direction := right * input_vector.x
+    move_direction += forward * -input_vector.y
+
+    if move_direction.length_squared() > 1.0:
+        move_direction = move_direction.normalized()
+
+    velocity.x = move_direction.x * move_speed
+    velocity.z = move_direction.z * move_speed
+
+    if not is_on_floor():
+        velocity.y -= gravity * delta
+    elif velocity.y < 0.0:
+        velocity.y = 0.0
+
+    move_and_slide()
+
 
     var input_vector := keyboard_input
 
@@ -244,6 +271,7 @@ func _update_joystick(touch_position: Vector2) -> void:
     joystick_knob.position = Vector2(40, 40) + difference
 
 
+
 func _update_camera() -> void:
     if not is_instance_valid(game_camera):
         return
@@ -252,13 +280,12 @@ func _update_camera() -> void:
     if pivot == null:
         return
 
-    pivot.rotation.y = camera_yaw
-    pivot.rotation.x = camera_pitch
+    pivot.position = Vector3(0, camera_height, 0)
+    pivot.rotation = Vector3(camera_pitch, camera_yaw, 0)
 
-    # Keep camera behind the player, looking toward the upper body.
     game_camera.position = Vector3(0, 0, camera_distance)
-    game_camera.look_at_from_position(
-        game_camera.position,
-        Vector3.ZERO,
+    game_camera.rotation = Vector3.ZERO
+    game_camera.look_at(
+        pivot.to_global(Vector3(0, 0.8, 0)),
         Vector3.UP
     )
