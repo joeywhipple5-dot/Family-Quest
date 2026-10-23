@@ -22,6 +22,15 @@ func build_character(hero_class_name: String, gender: String = "male") -> Node3D
     var root := Node3D.new()
     root.name = "%s_%s" % [hero_class_name, gender.capitalize()]
 
+    # Use the imported 3D model for the Warrior.
+    if hero_class_name == "Warrior":
+        var warrior_scene := load("res://hollow-warden (1).glb") as PackedScene
+        if warrior_scene != null:
+            var warrior_model := warrior_scene.instantiate()
+            warrior_model.name = "WarriorModel"
+            root.add_child(warrior_model)
+            return root
+
     var cloth: Color = PALETTES.get(
         hero_class_name, Color("#6A8C9B")
     )
