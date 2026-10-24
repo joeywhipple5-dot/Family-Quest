@@ -1,4 +1,3 @@
-
 extends Node3D
 
 const PlayerScript = preload("res://player.gd")
@@ -15,6 +14,7 @@ var quest_label: Label
 var message_label: Label
 
 var hero_class := "Warrior"
+var hero_gender := "male"
 var xp := 0
 var silver := 0
 var chore_gold := 0
@@ -42,22 +42,23 @@ var path_mobs_defeated := 0
 
 
 func _ready() -> void:
-    if Engine.has_singleton("PlayerProfile"):
-        pass
-
-    # Use the project's autoload when available.
+    # Load the saved hero selection.
     if get_node_or_null("/root/PlayerProfile") != null:
-        hero_class = str(get_node("/root/PlayerProfile").get("selected_class"))
+        var profile = get_node("/root/PlayerProfile")
+        hero_class = str(profile.get("selected_class"))
+        hero_gender = str(profile.get("selected_gender"))
 
     _create_environment()
     _build_village()
     _build_hearthvale_expansion()
     _build_quest_objects()
 
+    # Create the player using the selected hero.
     player = CharacterBody3D.new()
     player.name = "Hero"
     player.set_script(PlayerScript)
     player.set("hero_class", hero_class)
+    player.set("hero_gender", hero_gender)
     player.position = Vector3(0, 1, 4)
     add_child(player)
 
@@ -86,7 +87,7 @@ func _create_environment() -> void:
     light.shadow_enabled = true
     add_child(light)
 
-    # Original ground and expanded ground overlap to avoid a gap.
+    # Main ground.
     _add_box(
         "MainGround",
         Vector3(0, -0.3, 10),
@@ -98,21 +99,54 @@ func _create_environment() -> void:
 
 func _build_village() -> void:
     # Village square and main road.
-    _add_box("VillageSquare", Vector3(0, -0.02, -3),
-        Vector3(20, 0.12, 15), Color("#B9A27B"), false)
+    _add_box(
+        "VillageSquare",
+        Vector3(0, -0.02, -3),
+        Vector3(20, 0.12, 15),
+        Color("#B9A27B"),
+        false
+    )
 
-    _add_box("ForestRoad", Vector3(0, -0.015, 18),
-        Vector3(7, 0.1, 43), Color("#B9A27B"), false)
+    _add_box(
+        "ForestRoad",
+        Vector3(0, -0.015, 18),
+        Vector3(7, 0.1, 43),
+        Color("#B9A27B"),
+        false
+    )
 
     # Fountain.
-    _add_box("FountainBase", Vector3(0, 0.16, -5),
-        Vector3(3.2, 0.3, 3.2), Color("#9A9B91"), false)
-    _add_box("FountainBasin", Vector3(0, 0.42, -5),
-        Vector3(2.8, 0.55, 2.8), Color("#7E8E98"), false)
-    _add_box("FountainWater", Vector3(0, 0.72, -5),
-        Vector3(2.25, 0.1, 2.25), Color("#39A9D6"), false)
-    _add_box("FountainPillar", Vector3(0, 1.05, -5),
-        Vector3(0.35, 0.7, 0.35), Color("#C3C8C5"), false)
+    _add_box(
+        "FountainBase",
+        Vector3(0, 0.16, -5),
+        Vector3(3.2, 0.3, 3.2),
+        Color("#9A9B91"),
+        false
+    )
+
+    _add_box(
+        "FountainBasin",
+        Vector3(0, 0.42, -5),
+        Vector3(2.8, 0.55, 2.8),
+        Color("#7E8E98"),
+        false
+    )
+
+    _add_box(
+        "FountainWater",
+        Vector3(0, 0.72, -5),
+        Vector3(2.25, 0.1, 2.25),
+        Color("#39A9D6"),
+        false
+    )
+
+    _add_box(
+        "FountainPillar",
+        Vector3(0, 1.05, -5),
+        Vector3(0.35, 0.7, 0.35),
+        Color("#C3C8C5"),
+        false
+    )
 
     # Existing shops.
     _build_house(Vector3(-8, 0, -7), Color("#8A5435"), "Blacksmith")
@@ -120,26 +154,57 @@ func _build_village() -> void:
     _build_house(Vector3(8, 0, 1), Color("#93609A"), "Tailor")
 
     # Training yard.
-    _add_box("TrainingYard", Vector3(-8, 0.08, 2),
-        Vector3(6, 0.16, 5), Color("#9C8156"), false)
+    _add_box(
+        "TrainingYard",
+        Vector3(-8, 0.08, 2),
+        Vector3(6, 0.16, 5),
+        Color("#9C8156"),
+        false
+    )
 
     for x in [-11.0, -8.0, -5.0]:
-        _add_box("TrainingFence", Vector3(x, 0.75, 4.8),
-            Vector3(0.18, 1.5, 0.18), Color("#654329"), true)
+        _add_box(
+            "TrainingFence",
+            Vector3(x, 0.75, 4.8),
+            Vector3(0.18, 1.5, 0.18),
+            Color("#654329"),
+            true
+        )
 
-    _add_box("TrainingRail", Vector3(-8, 1.0, 4.8),
-        Vector3(6, 0.14, 0.14), Color("#654329"), false)
+    _add_box(
+        "TrainingRail",
+        Vector3(-8, 1.0, 4.8),
+        Vector3(6, 0.14, 0.14),
+        Color("#654329"),
+        false
+    )
 
     # Open woods gate.
-    _add_box("WoodsGateLeft", Vector3(-3.8, 1.5, 12),
-        Vector3(0.7, 3, 1), Color("#654329"), true)
-    _add_box("WoodsGateRight", Vector3(3.8, 1.5, 12),
-        Vector3(0.7, 3, 1), Color("#654329"), true)
-    _add_box("WoodsGateHeader", Vector3(0, 3, 12),
-        Vector3(8, 0.5, 1), Color("#654329"), false)
+    _add_box(
+        "WoodsGateLeft",
+        Vector3(-3.8, 1.5, 12),
+        Vector3(0.7, 3, 1),
+        Color("#654329"),
+        true
+    )
 
-    # Trees along the edges. The old north boundary is removed so
-    # the player can travel toward the expanded town and castle.
+    _add_box(
+        "WoodsGateRight",
+        Vector3(3.8, 1.5, 12),
+        Vector3(0.7, 3, 1),
+        Color("#654329"),
+        true
+    )
+
+    _add_box(
+        "WoodsGateHeader",
+        Vector3(0, 3, 12),
+        Vector3(8, 0.5, 1),
+        Color("#654329"),
+        false
+    )
+
+    # Trees along the edges.
     for i in range(12):
         var z := 15.0 + i * 2.7
         _build_tree(Vector3(-10, 0, z))
@@ -150,8 +215,13 @@ func _build_village() -> void:
         _build_tree(Vector3(-27, 0, z))
         _build_tree(Vector3(27, 0, z))
 
-    _add_box("SouthBoundary", Vector3(0, 1, 58),
-        Vector3(60, 2, 1), Color("#355B31"), true)
+    _add_box(
+        "SouthBoundary",
+        Vector3(0, 1, 58),
+        Vector3(60, 2, 1),
+        Color("#355B31"),
+        true
+    )
 
 
 # --------------------------------------------------
@@ -160,18 +230,33 @@ func _build_village() -> void:
 
 func _build_hearthvale_expansion() -> void:
     # Extended ground to support the castle district.
-    _add_box("CastleDistrictGround", Vector3(0, -0.32, -37),
-        Vector3(70, 0.45, 100), Color("#477C40"), true)
+    _add_box(
+        "CastleDistrictGround",
+        Vector3(0, -0.32, -37),
+        Vector3(70, 0.45, 100),
+        Color("#477C40"),
+        true
+    )
 
     # Main road from the original village to the castle.
-    _add_box("CastleApproachRoad", Vector3(0, -0.02, -34),
-        Vector3(12, 0.12, 68), Color("#B9A27B"), false)
+    _add_box(
+        "CastleApproachRoad",
+        Vector3(0, -0.02, -34),
+        Vector3(12, 0.12, 68),
+        Color("#B9A27B"),
+        false
+    )
 
     # Expanded market square.
-    _add_box("MarketSquare", Vector3(0, 0.02, -22),
-        Vector3(34, 0.15, 18), Color("#C8B58E"), false)
+    _add_box(
+        "MarketSquare",
+        Vector3(0, 0.02, -22),
+        Vector3(34, 0.15, 18),
+        Color("#C8B58E"),
+        false
+    )
 
-    # Extra houses and shops on both sides of town.
+    # Extra houses and shops.
     _build_house(Vector3(-15, 0, -20), Color("#9A6546"), "Baker")
     _build_house(Vector3(15, 0, -20), Color("#526E8A"), "GeneralStore")
     _build_house(Vector3(-17, 0, -33), Color("#A18454"), "Inn")
@@ -180,45 +265,117 @@ func _build_hearthvale_expansion() -> void:
     _build_house(Vector3(13, 0, -44), Color("#54765A"), "TownHouse")
 
     # Market stalls.
-    _add_box("MarketStallRed", Vector3(-6, 1.2, -23),
-        Vector3(4, 2.4, 3), Color("#9B4D36"), false)
-    _add_box("MarketStallBlue", Vector3(6, 1.2, -23),
-        Vector3(4, 2.4, 3), Color("#426A99"), false)
-    _add_box("MarketStallRoofRed", Vector3(-6, 2.5, -23),
-        Vector3(4.6, 0.25, 3.6), Color("#D4B36D"), false)
-    _add_box("MarketStallRoofBlue", Vector3(6, 2.5, -23),
-        Vector3(4.6, 0.25, 3.6), Color("#7194BA"), false)
+    _add_box(
+        "MarketStallRed",
+        Vector3(-6, 1.2, -23),
+        Vector3(4, 2.4, 3),
+        Color("#9B4D36"),
+        false
+    )
+
+    _add_box(
+        "MarketStallBlue",
+        Vector3(6, 1.2, -23),
+        Vector3(4, 2.4, 3),
+        Color("#426A99"),
+        false
+    )
+
+    _add_box(
+        "MarketStallRoofRed",
+        Vector3(-6, 2.5, -23),
+        Vector3(4.6, 0.25, 3.6),
+        Color("#D4B36D"),
+        false
+    )
+
+    _add_box(
+        "MarketStallRoofBlue",
+        Vector3(6, 2.5, -23),
+        Vector3(4.6, 0.25, 3.6),
+        Color("#7194BA"),
+        false
+    )
 
     # Castle courtyard.
-    _add_box("CastleCourtyard", Vector3(0, 0.02, -62),
-        Vector3(42, 0.15, 24), Color("#8B8C89"), false)
+    _add_box(
+        "CastleCourtyard",
+        Vector3(0, 0.02, -62),
+        Vector3(42, 0.15, 24),
+        Color("#8B8C89"),
+        false
+    )
 
     var stone := Color("#777D87")
     var dark_stone := Color("#555B66")
 
     # Castle outer walls.
-    _add_box("CastleBackWall", Vector3(0, 4, -77),
-        Vector3(42, 8, 2), stone, true)
-    _add_box("CastleLeftWall", Vector3(-20, 4, -64),
-        Vector3(2, 8, 26), stone, true)
-    _add_box("CastleRightWall", Vector3(20, 4, -64),
-        Vector3(2, 8, 26), stone, true)
+    _add_box(
+        "CastleBackWall",
+        Vector3(0, 4, -77),
+        Vector3(42, 8, 2),
+        stone,
+        true
+    )
+
+    _add_box(
+        "CastleLeftWall",
+        Vector3(-20, 4, -64),
+        Vector3(2, 8, 26),
+        stone,
+        true
+    )
+
+    _add_box(
+        "CastleRightWall",
+        Vector3(20, 4, -64),
+        Vector3(2, 8, 26),
+        stone,
+        true
+    )
 
     # Front wall sections leave an opening for the gate.
-    _add_box("CastleFrontLeft", Vector3(-13, 4, -51),
-        Vector3(16, 8, 2), stone, true)
-    _add_box("CastleFrontRight", Vector3(13, 4, -51),
-        Vector3(16, 8, 2), stone, true)
+    _add_box(
+        "CastleFrontLeft",
+        Vector3(-13, 4, -51),
+        Vector3(16, 8, 2),
+        stone,
+        true
+    )
+
+    _add_box(
+        "CastleFrontRight",
+        Vector3(13, 4, -51),
+        Vector3(16, 8, 2),
+        stone,
+        true
+    )
 
     # Central gatehouse.
-    _add_box("CastleGatehouse", Vector3(0, 6, -51),
-        Vector3(9, 12, 4), dark_stone, false)
-    _add_box("CastleGate", Vector3(0, 3, -48.7),
-        Vector3(5, 6, 0.35), Color("#402719"), false)
+    _add_box(
+        "CastleGatehouse",
+        Vector3(0, 6, -51),
+        Vector3(9, 12, 4),
+        dark_stone,
+        false
+    )
+
+    _add_box(
+        "CastleGate",
+        Vector3(0, 3, -48.7),
+        Vector3(5, 6, 0.35),
+        Color("#402719"),
+        false
+    )
 
     # Main keep behind the courtyard.
-    _add_box("CastleKeep", Vector3(0, 7, -69),
-        Vector3(18, 14, 16), Color("#626975"), true)
+    _add_box(
+        "CastleKeep",
+        Vector3(0, 7, -69),
+        Vector3(18, 14, 16),
+        Color("#626975"),
+        true
+    )
 
     # Four tall towers.
     _build_tower(Vector3(-16, 0, -73), 15)
@@ -227,12 +384,29 @@ func _build_hearthvale_expansion() -> void:
     _build_tower(Vector3(16, 0, -53), 12)
 
     # Castle roof accents and banners.
-    _add_box("KeepRoof", Vector3(0, 14.5, -69),
-        Vector3(19, 1, 17), Color("#343E50"), false)
-    _add_box("CastleBannerLeft", Vector3(-8, 9, -60),
-        Vector3(1.3, 4, 0.15), Color("#315EA0"), false)
-    _add_box("CastleBannerRight", Vector3(8, 9, -60),
-        Vector3(1.3, 4, 0.15), Color("#315EA0"), false)
+    _add_box(
+        "KeepRoof",
+        Vector3(0, 14.5, -69),
+        Vector3(19, 1, 17),
+        Color("#343E50"),
+        false
+    )
+
+    _add_box(
+        "CastleBannerLeft",
+        Vector3(-8, 9, -60),
+        Vector3(1.3, 4, 0.15),
+        Color("#315EA0"),
+        false
+    )
+
+    _add_box(
+        "CastleBannerRight",
+        Vector3(8, 9, -60),
+        Vector3(1.3, 4, 0.15),
+        Color("#315EA0"),
+        false
+    )
 
     # More trees along the outskirts.
     for i in range(12):
@@ -247,33 +421,73 @@ func _build_hearthvale_expansion() -> void:
 
 
 func _build_house(p: Vector3, house_color: Color, house_name: String) -> void:
-    _add_box(house_name, p + Vector3(0, 2.2, 0),
-        Vector3(6, 4.4, 6), house_color, true)
+    _add_box(
+        house_name,
+        p + Vector3(0, 2.2, 0),
+        Vector3(6, 4.4, 6),
+        house_color,
+        true
+    )
 
-    _add_box(house_name + "Roof", p + Vector3(0, 4.65, 0),
-        Vector3(6.8, 0.6, 6.8), Color("#49352D"), false)
+    _add_box(
+        house_name + "Roof",
+        p + Vector3(0, 4.65, 0),
+        Vector3(6.8, 0.6, 6.8),
+        Color("#49352D"),
+        false
+    )
 
-    _add_box(house_name + "Door", p + Vector3(0, 1.1, 3.05),
-        Vector3(1.3, 2.2, 0.15), Color("#4A2B1A"), false)
+    _add_box(
+        house_name + "Door",
+        p + Vector3(0, 1.1, 3.05),
+        Vector3(1.3, 2.2, 0.15),
+        Color("#4A2B1A"),
+        false
+    )
 
-    _add_box(house_name + "WindowLeft", p + Vector3(-1.8, 2.3, 3.06),
-        Vector3(0.9, 0.9, 0.12), Color("#9ED5E0"), false)
+    _add_box(
+        house_name + "WindowLeft",
+        p + Vector3(-1.8, 2.3, 3.06),
+        Vector3(0.9, 0.9, 0.12),
+        Color("#9ED5E0"),
+        false
+    )
 
-    _add_box(house_name + "WindowRight", p + Vector3(1.8, 2.3, 3.06),
-        Vector3(0.9, 0.9, 0.12), Color("#9ED5E0"), false)
+    _add_box(
+        house_name + "WindowRight",
+        p + Vector3(1.8, 2.3, 3.06),
+        Vector3(0.9, 0.9, 0.12),
+        Color("#9ED5E0"),
+        false
+    )
 
 
 func _build_tower(p: Vector3, tower_height: float) -> void:
-    _add_box("CastleTower", p + Vector3(0, tower_height / 2.0, 0),
-        Vector3(5, tower_height, 5), Color("#747B87"), true)
+    _add_box(
+        "CastleTower",
+        p + Vector3(0, tower_height / 2.0, 0),
+        Vector3(5, tower_height, 5),
+        Color("#747B87"),
+        true
+    )
 
-    _add_box("CastleTowerTop", p + Vector3(0, tower_height + 0.4, 0),
-        Vector3(6, 0.8, 6), Color("#414956"), false)
+    _add_box(
+        "CastleTowerTop",
+        p + Vector3(0, tower_height + 0.4, 0),
+        Vector3(6, 0.8, 6),
+        Color("#414956"),
+        false
+    )
 
 
 func _build_tree(p: Vector3) -> void:
-    var trunk := _add_box("TreeTrunk", p + Vector3(0, 1, 0),
-        Vector3(0.55, 2, 0.55), Color("#573820"), true)
+    var trunk := _add_box(
+        "TreeTrunk",
+        p + Vector3(0, 1, 0),
+        Vector3(0.55, 2, 0.55),
+        Color("#573820"),
+        true
+    )
 
     var greens := [
         Color("#245C2D"),
@@ -329,7 +543,12 @@ func _build_quest_objects() -> void:
     elder_label.pixel_size = 0.01
     elder.add_child(elder_label)
 
-    _add_quest_marker(elder, "!", Vector3(0, 2.8, 0), Color("#F4CF57"))
+    _add_quest_marker(
+        elder,
+        "!",
+        Vector3(0, 2.8, 0),
+        Color("#F4CF57")
+    )
 
     var log_positions := [
         Vector3(-9, 0.1, 18),
@@ -345,9 +564,16 @@ func _build_quest_objects() -> void:
             Color("#613A20"),
             true
         )
+
         log_node.set_meta("quest_log", true)
         log_resources.append(log_node)
-        _add_quest_marker(log_node, "◆", Vector3(0, 0.8, 0), Color("#E6C16A"))
+
+        _add_quest_marker(
+            log_node,
+            "◆",
+            Vector3(0, 0.8, 0),
+            Color("#E6C16A")
+        )
 
 
 func _add_quest_marker(
@@ -392,6 +618,7 @@ func _add_box(
 
     if solid:
         parent = StaticBody3D.new()
+
         var collision := CollisionShape3D.new()
         var shape := BoxShape3D.new()
         shape.size = s
@@ -448,14 +675,8 @@ func _make_hud() -> void:
     message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     col.add_child(message_label)
 
-    var class_row := HBoxContainer.new()
-    col.add_child(class_row)
-
-    for c in ["Warrior", "Mage", "Rogue", "Druid", "Ranger"]:
-        var button := Button.new()
-        button.text = c
-        button.pressed.connect(_select_class.bind(c))
-        class_row.add_child(button)
+    # Class selection is intentionally removed from the gameplay HUD.
+    # The hero class and gender come from PlayerProfile.
 
     var interact_button := Button.new()
     interact_button.text = "INTERACT"
@@ -493,23 +714,6 @@ func _unhandled_input(event: InputEvent) -> void:
         get_viewport().set_input_as_handled()
 
 
-func _select_class(c: String) -> void:
-    hero_class = c
-    if is_instance_valid(player):
-        player.set("hero_class", c)
-
-    var abilities := {
-        "Warrior": "Titan Smash",
-        "Mage": "Starfall",
-        "Rogue": "Phantom Flurry",
-        "Druid": "Worldroot Surge",
-        "Ranger": "Heavenpiercer"
-    }
-
-    _message("Selected %s — ability: %s." % [c, abilities[c]])
-    _refresh()
-
-
 # --------------------------------------------------
 # COMBAT
 # --------------------------------------------------
@@ -523,17 +727,29 @@ func _attack() -> void:
 
     for node in get_children():
         if node is CharacterBody3D and node != player and node.has_method("take_hit"):
-            var distance := _flat_distance(player.global_position, node.global_position)
+            var distance := _flat_distance(
+                player.global_position,
+                node.global_position
+            )
+
             if distance < best_distance:
                 best_distance = distance
                 nearest = node
 
     if nearest != null:
         var damage := 35
+
         if nearest.get("is_boss"):
             damage = 20
+
         nearest.call("take_hit", damage)
-        _message("%s attacks %s." % [hero_class, str(nearest.get("enemy_name"))])
+
+        _message(
+            "%s attacks %s." % [
+                hero_class,
+                str(nearest.get("enemy_name"))
+            ]
+        )
     else:
         _message("Move closer to an enemy to attack.")
 
@@ -541,6 +757,7 @@ func _attack() -> void:
 func enemy_defeated(e: Node) -> void:
     if mob_quest_stage == 1 and e.has_meta("clear_woods_target") and not e.get("is_boss"):
         mobs_defeated += 1
+
         if mobs_defeated >= MOBS_REQUIRED:
             mob_quest_stage = 2
             _message("All 3 monsters defeated! Return to the Village Elder.")
@@ -553,20 +770,34 @@ func enemy_defeated(e: Node) -> void:
 
     if quest5_stage == 1 and e.has_meta("path_quest_target") and not e.get("is_boss"):
         path_mobs_defeated += 1
+
         if path_mobs_defeated >= PATH_MOBS_REQUIRED:
             quest5_stage = 2
             _message("The path is clear! Return to the Village Elder.")
         else:
-            _message("Keep the Path Safe: %d/5 defeated." % path_mobs_defeated)
+            _message(
+                "Keep the Path Safe: %d/5 defeated." %
+                path_mobs_defeated
+            )
 
     xp += 30 if e.get("is_boss") else 10
     silver += 100 if e.get("is_boss") else 15
+
     _refresh()
-    _message("%s defeated! Earned XP and Silver. Combat does not award Chore Gold." % str(e.get("enemy_name")))
+
+    _message(
+        "%s defeated! Earned XP and Silver. Combat does not award Chore Gold."
+        % str(e.get("enemy_name"))
+    )
 
 
 func _spawn_quest_mobs() -> void:
-    var names := ["Forest Slime", "Woodland Goblin", "Thornwolf"]
+    var names := [
+        "Forest Slime",
+        "Woodland Goblin",
+        "Thornwolf"
+    ]
+
     var positions := [
         Vector3(-7, 1, 23),
         Vector3(0, 1, 27),
@@ -610,6 +841,7 @@ func _spawn_supply_crates() -> void:
             Color("#8B5229"),
             true
         )
+
         supply_crates.append(crate)
 
 
@@ -659,6 +891,7 @@ func _interact() -> void:
         for item in log_resources:
             if is_instance_valid(item):
                 var d := _flat_distance(p, item.global_position)
+
                 if d <= closest_distance:
                     closest_distance = d
                     closest_log = item
@@ -685,6 +918,7 @@ func _interact() -> void:
         for item in supply_crates:
             if is_instance_valid(item):
                 var d := _flat_distance(p, item.global_position)
+
                 if d <= closest_distance:
                     closest_distance = d
                     closest_crate = item
@@ -710,7 +944,10 @@ func _interact() -> void:
             _message("Village Elder: Gather 3 wooden logs for Hearthvale.")
 
         elif quest_stage == 1:
-            _message("Village Elder: Bring me 3 logs. Collected: %d/3." % logs_collected)
+            _message(
+                "Village Elder: Bring me 3 logs. Collected: %d/3."
+                % logs_collected
+            )
 
         elif quest_stage == 2:
             quest_stage = 3
@@ -769,7 +1006,10 @@ func _interact() -> void:
             _message("Quest 5: Defeat 5 monsters along the path.")
 
         elif quest5_stage == 1:
-            _message("Secure the path: %d/5 monsters defeated." % path_mobs_defeated)
+            _message(
+                "Secure the path: %d/5 monsters defeated."
+                % path_mobs_defeated
+            )
 
         elif quest5_stage == 2:
             quest5_stage = 3
@@ -786,16 +1026,22 @@ func _interact() -> void:
     # Other town interactions.
     if _flat_distance(p, Vector3(0, 0, -5)) < 5:
         _message("Village fountain: Welcome to Hearthvale!")
+
     elif _flat_distance(p, Vector3(-8, 0, -7)) < 5:
         _message("Blacksmith: Weapon shop coming soon.")
+
     elif _flat_distance(p, Vector3(8, 0, -7)) < 5:
         _message("Armor shop: Class-specific gear coming soon.")
+
     elif _flat_distance(p, Vector3(8, 0, 1)) < 4.5:
         _message("Tailor: Appearance customization coming soon.")
+
     elif p.z < -48:
         _message("Castle district: The castle will host future quests.")
+
     elif p.z > 12:
         _message("Whispering Woods: Explore the path and gather resources.")
+
     else:
         _message("Explore Hearthvale and interact with people and objects.")
 
@@ -810,15 +1056,21 @@ func _flat_distance(a: Vector3, b: Vector3) -> float:
 
 func _refresh() -> void:
     var hp_value := 100
+
     if is_instance_valid(player):
         hp_value = int(player.get("hp"))
 
     if is_instance_valid(status_label):
-        status_label.text = "HERO: %s  |  HP: %d/100" % [hero_class, hp_value]
+        status_label.text = "HERO: %s  |  HP: %d/100" % [
+            hero_class,
+            hp_value
+        ]
 
     if is_instance_valid(economy_label):
         economy_label.text = "XP: %d  |  Silver: %d  |  Chore Gold: %d" % [
-            xp, silver, chore_gold
+            xp,
+            silver,
+            chore_gold
         ]
 
     if not is_instance_valid(quest_label):
@@ -826,34 +1078,49 @@ func _refresh() -> void:
 
     if quest_stage == 0:
         quest_label.text = "Quest 1: Talk to the Village Elder"
+
     elif quest_stage == 1:
         quest_label.text = "Quest 1: Collect wooden logs (%d/3)" % logs_collected
+
     elif quest_stage == 2:
         quest_label.text = "Quest 1: Return to the Village Elder"
+
     elif mob_quest_stage == 0:
         quest_label.text = "Quest 1 complete: Talk to the Elder for Quest 2"
+
     elif mob_quest_stage == 1:
         quest_label.text = "Quest 2: Defeat monsters (%d/3)" % mobs_defeated
+
     elif mob_quest_stage == 2:
         quest_label.text = "Quest 2: Return to the Village Elder"
+
     elif quest3_stage == 0:
         quest_label.text = "Quest 2 complete: Talk to the Elder for Quest 3"
+
     elif quest3_stage == 1:
         quest_label.text = "Quest 3: Defeat Mossjaw"
+
     elif quest3_stage == 2:
         quest_label.text = "Quest 3: Return to the Village Elder"
+
     elif quest4_stage == 0:
         quest_label.text = "Quest 3 complete: Talk to the Elder for Quest 4"
+
     elif quest4_stage == 1:
         quest_label.text = "Quest 4: Find supply crates (%d/3)" % crates_found
+
     elif quest4_stage == 2:
         quest_label.text = "Quest 4: Return to the Village Elder"
+
     elif quest5_stage == 0:
         quest_label.text = "Quest 4 complete: Talk to the Elder for Quest 5"
+
     elif quest5_stage == 1:
         quest_label.text = "Quest 5: Defeat path monsters (%d/5)" % path_mobs_defeated
+
     elif quest5_stage == 2:
         quest_label.text = "Quest 5: Return to the Village Elder"
+
     else:
         quest_label.text = "Demo complete: All 5 quests finished!"
 
@@ -861,4 +1128,5 @@ func _refresh() -> void:
 func _message(t: String) -> void:
     if is_instance_valid(message_label):
         message_label.text = t
+
     print(t)
