@@ -1,4 +1,3 @@
-
 extends Node3D
 
 const PlayerScript = preload("res://player.gd")
@@ -20,24 +19,44 @@ var xp := 0
 var silver := 0
 var chore_gold := 0
 
-# Quest 1
+# Equipment and town state
+var owned_weapons: Array[String] = ["Worn Sword"]
+var owned_armor: Array[String] = ["Traveler Clothes"]
+var equipped_weapon := "Worn Sword"
+var equipped_armor := "Traveler Clothes"
+var weapon_attack_bonus := 0
+var armor_defense_bonus := 0
+var active_overlay: Control
+var inside_building := false
+var exterior_return_position := Vector3.ZERO
+var interior_origin := Vector3(100.0, 0.0, 0.0)
+var active_shop := ""
+
+var weapon_catalog := {
+    "Iron Sword": {"price": 50, "attack": 10},
+    "Steel Sword": {"price": 150, "attack": 20},
+    "Knight's Blade": {"price": 350, "attack": 35}
+}
+
+var armor_catalog := {
+    "Leather Armor": {"price": 40, "defense": 5},
+    "Iron Armor": {"price": 125, "defense": 12},
+    "Knight's Plate": {"price": 300, "defense": 25}
+}
+
 var quest_stage := 0
 var logs_collected := 0
 var log_resources: Array[Node3D] = []
 
-# Quest 2
 var mob_quest_stage := 0
 var mobs_defeated := 0
 
-# Quest 3
 var quest3_stage := 0
 
-# Quest 4
 var quest4_stage := 0
 var crates_found := 0
 var supply_crates: Array[Node3D] = []
 
-# Quest 5
 var quest5_stage := 0
 var path_mobs_defeated := 0
 
@@ -50,8 +69,8 @@ func _ready() -> void:
 
     _create_environment()
     _build_village()
-    print("HEARTHVALE DEBUG: village build started")
     _build_hearthvale_expansion()
+    _build_interior_room()
     _build_quest_objects()
 
     player = CharacterBody3D.new()
@@ -67,9 +86,9 @@ func _ready() -> void:
     _refresh()
 
 
-# --------------------------------------------------
+# ==================================================
 # WORLD AND LIGHTING
-# --------------------------------------------------
+# ==================================================
 
 func _create_environment() -> void:
     var world := WorldEnvironment.new()
@@ -113,7 +132,6 @@ func _build_village() -> void:
         false
     )
 
-    # Village fountain
     _add_box(
         "FountainBase",
         Vector3(0, 0.16, -5),
@@ -146,12 +164,10 @@ func _build_village() -> void:
         false
     )
 
-    # Original village shops
     _build_house(Vector3(-8, 0, -7), Color("#8A5435"), "Blacksmith")
     _build_house(Vector3(8, 0, -7), Color("#60788A"), "ArmorShop")
     _build_house(Vector3(8, 0, 1), Color("#93609A"), "Tailor")
 
-    # Training yard
     _add_box(
         "TrainingYard",
         Vector3(-8, 0.08, 2),
@@ -177,7 +193,6 @@ func _build_village() -> void:
         false
     )
 
-    # Woods gate
     _add_box(
         "WoodsGateLeft",
         Vector3(-3.8, 1.5, 12),
@@ -202,7 +217,6 @@ func _build_village() -> void:
         false
     )
 
-    # Trees along the edges
     for i in range(12):
         var z := 15.0 + i * 2.7
         _build_tree(Vector3(-10, 0, z))
@@ -222,9 +236,9 @@ func _build_village() -> void:
     )
 
 
-# --------------------------------------------------
-# EXPANDED HEARTHVALE TOWN AND CASTLE
-# --------------------------------------------------
+# ==================================================
+# EXPANDED HEARTHVALE AND CASTLE
+# ==================================================
 
 func _build_hearthvale_expansion() -> void:
     _add_box(
@@ -251,15 +265,13 @@ func _build_hearthvale_expansion() -> void:
         false
     )
 
-    # Market district buildings
     _build_house(Vector3(-15, 0, -20), Color("#9A6546"), "Baker")
     _build_house(Vector3(15, 0, -20), Color("#526E8A"), "GeneralStore")
     _build_house(Vector3(-17, 0, -33), Color("#A18454"), "Inn")
     _build_house(Vector3(17, 0, -33), Color("#76518A"), "Apothecary")
-    _build_house(Vector3(-13, 0, -44), Color("#8A5541"), "TownHouse")
-    _build_house(Vector3(13, 0, -44), Color("#54765A"), "TownHouse")
+    _build_house(Vector3(-13, 0, -44), Color("#8A5541"), "TownHouseWest")
+    _build_house(Vector3(13, 0, -44), Color("#54765A"), "TownHouseEast")
 
-    # Market stalls
     _add_box(
         "MarketStallRed",
         Vector3(-6, 1.2, -23),
@@ -292,7 +304,6 @@ func _build_hearthvale_expansion() -> void:
         false
     )
 
-    # Castle courtyard
     _add_box(
         "CastleCourtyard",
         Vector3(0, 0.02, -62),
@@ -304,45 +315,11 @@ func _build_hearthvale_expansion() -> void:
     var stone := Color("#777D87")
     var dark_stone := Color("#555B66")
 
-    _add_box(
-        "CastleBackWall",
-        Vector3(0, 4, -77),
-        Vector3(42, 8, 2),
-        stone,
-        true
-    )
-
-    _add_box(
-        "CastleLeftWall",
-        Vector3(-20, 4, -64),
-        Vector3(2, 8, 26),
-        stone,
-        true
-    )
-
-    _add_box(
-        "CastleRightWall",
-        Vector3(20, 4, -64),
-        Vector3(2, 8, 26),
-        stone,
-        true
-    )
-
-    _add_box(
-        "CastleFrontLeft",
-        Vector3(-13, 4, -51),
-        Vector3(16, 8, 2),
-        stone,
-        true
-    )
-
-    _add_box(
-        "CastleFrontRight",
-        Vector3(13, 4, -51),
-        Vector3(16, 8, 2),
-        stone,
-        true
-    )
+    _add_box("CastleBackWall", Vector3(0, 4, -77), Vector3(42, 8, 2), stone, true)
+    _add_box("CastleLeftWall", Vector3(-20, 4, -64), Vector3(2, 8, 26), stone, true)
+    _add_box("CastleRightWall", Vector3(20, 4, -64), Vector3(2, 8, 26), stone, true)
+    _add_box("CastleFrontLeft", Vector3(-13, 4, -51), Vector3(16, 8, 2), stone, true)
+    _add_box("CastleFrontRight", Vector3(13, 4, -51), Vector3(16, 8, 2), stone, true)
 
     _add_box(
         "CastleGatehouse",
@@ -381,23 +358,9 @@ func _build_hearthvale_expansion() -> void:
         false
     )
 
-    _add_box(
-        "CastleBannerLeft",
-        Vector3(-8, 9, -60),
-        Vector3(1.3, 4, 0.15),
-        Color("#315EA0"),
-        false
-    )
+    _add_box("CastleBannerLeft", Vector3(-8, 9, -60), Vector3(1.3, 4, 0.15), Color("#315EA0"), false)
+    _add_box("CastleBannerRight", Vector3(8, 9, -60), Vector3(1.3, 4, 0.15), Color("#315EA0"), false)
 
-    _add_box(
-        "CastleBannerRight",
-        Vector3(8, 9, -60),
-        Vector3(1.3, 4, 0.15),
-        Color("#315EA0"),
-        false
-    )
-
-    # Trees around the outskirts
     for i in range(12):
         var x := -31.0 + float(i) * 5.5
         _build_tree(Vector3(x, 0, -13))
@@ -409,157 +372,32 @@ func _build_hearthvale_expansion() -> void:
         _build_tree(Vector3(29, 0, z))
 
 
-# --------------------------------------------------
-# HOUSE BUILDING
-# --------------------------------------------------
-
 func _build_house(p: Vector3, house_color: Color, house_name: String) -> void:
-    # Floor inside the house
-    _add_box(
-        house_name + "InteriorFloor",
-        p + Vector3(0, 0.08, 0),
-        Vector3(5.8, 0.16, 5.8),
-        Color("#9B8060"),
-        true
-    )
+    _add_box(house_name + "Floor", p + Vector3(0, 0.08, 0), Vector3(5.8, 0.16, 5.8), Color("#9B8060"), true)
+    _add_box(house_name + "LeftWall", p + Vector3(-2.9, 2.2, 0), Vector3(0.2, 4.4, 6.0), house_color, true)
+    _add_box(house_name + "RightWall", p + Vector3(2.9, 2.2, 0), Vector3(0.2, 4.4, 6.0), house_color, true)
+    _add_box(house_name + "BackWall", p + Vector3(0, 2.2, -2.9), Vector3(6.0, 4.4, 0.2), house_color, true)
+    _add_box(house_name + "FrontLeftWall", p + Vector3(-2.0, 2.2, 2.9), Vector3(2.0, 4.4, 0.2), house_color, true)
+    _add_box(house_name + "FrontRightWall", p + Vector3(2.0, 2.2, 2.9), Vector3(2.0, 4.4, 0.2), house_color, true)
+    _add_box(house_name + "DoorHeader", p + Vector3(0, 3.35, 2.9), Vector3(2.0, 2.1, 0.2), house_color, true)
 
-    # Left wall
-    _add_box(
-        house_name + "LeftWall",
-        p + Vector3(-2.9, 2.2, 0),
-        Vector3(0.2, 4.4, 6.0),
-        house_color,
-        true
-    )
-
-    # Right wall
-    _add_box(
-        house_name + "RightWall",
-        p + Vector3(2.9, 2.2, 0),
-        Vector3(0.2, 4.4, 6.0),
-        house_color,
-        true
-    )
-
-    # Back wall
-    _add_box(
-        house_name + "BackWall",
-        p + Vector3(0, 2.2, -2.9),
-        Vector3(6.0, 4.4, 0.2),
-        house_color,
-        true
-    )
-
-    # Front wall left of the entrance
-    _add_box(
-        house_name + "FrontLeftWall",
-        p + Vector3(-2.0, 2.2, 2.9),
-        Vector3(2.0, 4.4, 0.2),
-        house_color,
-        true
-    )
-
-    # Front wall right of the entrance
-    _add_box(
-        house_name + "FrontRightWall",
-        p + Vector3(2.0, 2.2, 2.9),
-        Vector3(2.0, 4.4, 0.2),
-        house_color,
-        true
-    )
-
-    # Wall above the doorway
-    _add_box(
-        house_name + "DoorHeader",
-        p + Vector3(0, 3.35, 2.9),
-        Vector3(2.0, 2.1, 0.2),
-        house_color,
-        true
-    )
-
-    # Roof is visual only
-    _add_box(
-        house_name + "Roof",
-        p + Vector3(0, 4.65, 0),
-        Vector3(6.8, 0.6, 6.8),
-        Color("#49352D"),
-        false
-    )
-
-    # Door placed at the side of the entrance
-    _add_box(
-        house_name + "Door",
-        p + Vector3(0.65, 1.05, 2.78),
-        Vector3(0.65, 2.1, 0.12),
-        Color("#4A2B1A"),
-        false
-    )
-
-    # Front windows
-    _add_box(
-        house_name + "WindowLeft",
-        p + Vector3(-2.0, 2.3, 3.02),
-        Vector3(0.75, 0.9, 0.1),
-        Color("#9ED5E0"),
-        false
-    )
-
-    _add_box(
-        house_name + "WindowRight",
-        p + Vector3(2.0, 2.3, 3.02),
-        Vector3(0.75, 0.9, 0.1),
-        Color("#9ED5E0"),
-        false
-    )
-
-    # Interior counter
-    _add_box(
-        house_name + "InteriorCounter",
-        p + Vector3(0, 0.65, -1.25),
-        Vector3(2.0, 0.9, 0.7),
-        Color("#654329"),
-        true
-    )
+    _add_box("Roof_" + house_name, p + Vector3(0, 4.65, 0), Vector3(6.8, 0.6, 6.8), Color("#49352D"), false)
+    _add_box("Door_" + house_name, p + Vector3(0.65, 1.05, 2.78), Vector3(0.65, 2.1, 0.12), Color("#4A2B1A"), false)
+    _add_box("WindowL_" + house_name, p + Vector3(-2.0, 2.3, 3.02), Vector3(0.75, 0.9, 0.1), Color("#9ED5E0"), false)
+    _add_box("WindowR_" + house_name, p + Vector3(2.0, 2.3, 3.02), Vector3(0.75, 0.9, 0.1), Color("#9ED5E0"), false)
+    _add_box("Counter_" + house_name, p + Vector3(0, 0.65, -1.25), Vector3(2.0, 0.9, 0.7), Color("#654329"), true)
 
 
 func _build_tower(p: Vector3, tower_height: float) -> void:
-    _add_box(
-        "CastleTower",
-        p + Vector3(0, tower_height / 2.0, 0),
-        Vector3(5, tower_height, 5),
-        Color("#747B87"),
-        true
-    )
-
-    _add_box(
-        "CastleTowerTop",
-        p + Vector3(0, tower_height + 0.4, 0),
-        Vector3(6, 0.8, 6),
-        Color("#414956"),
-        false
-    )
+    _add_box("CastleTower", p + Vector3(0, tower_height / 2.0, 0), Vector3(5, tower_height, 5), Color("#747B87"), true)
+    _add_box("CastleTowerTop", p + Vector3(0, tower_height + 0.4, 0), Vector3(6, 0.8, 6), Color("#414956"), false)
 
 
 func _build_tree(p: Vector3) -> void:
-    var trunk := _add_box(
-        "TreeTrunk",
-        p + Vector3(0, 1, 0),
-        Vector3(0.55, 2, 0.55),
-        Color("#573820"),
-        true
-    )
+    var trunk := _add_box("TreeTrunk", p + Vector3(0, 1, 0), Vector3(0.55, 2, 0.55), Color("#573820"), true)
 
-    var greens := [
-        Color("#245C2D"),
-        Color("#2F7135"),
-        Color("#3A7B3D")
-    ]
-
-    var offsets := [
-        Vector3(0, 2.55, 0),
-        Vector3(-0.55, 2.25, 0.15),
-        Vector3(0.5, 2.35, -0.15)
-    ]
+    var greens := [Color("#245C2D"), Color("#2F7135"), Color("#3A7B3D")]
+    var offsets := [Vector3(0, 2.55, 0), Vector3(-0.55, 2.25, 0.15), Vector3(0.5, 2.35, -0.15)]
 
     for i in range(3):
         var crown := MeshInstance3D.new()
@@ -575,9 +413,9 @@ func _build_tree(p: Vector3) -> void:
         trunk.add_child(crown)
 
 
-# --------------------------------------------------
-# QUEST OBJECTS
-# --------------------------------------------------
+# ==================================================
+# QUEST OBJECTS AND BUILD HELPERS
+# ==================================================
 
 func _build_quest_objects() -> void:
     elder = Node3D.new()
@@ -603,12 +441,7 @@ func _build_quest_objects() -> void:
     elder_label.pixel_size = 0.01
     elder.add_child(elder_label)
 
-    _add_quest_marker(
-        elder,
-        "!",
-        Vector3(0, 2.8, 0),
-        Color("#F4CF57")
-    )
+    _add_quest_marker(elder, "!", Vector3(0, 2.8, 0), Color("#F4CF57"))
 
     var log_positions := [
         Vector3(-9, 0.1, 18),
@@ -617,31 +450,13 @@ func _build_quest_objects() -> void:
     ]
 
     for i in range(log_positions.size()):
-        var log_node := _add_box(
-            "WoodenLog%d" % i,
-            log_positions[i],
-            Vector3(1.4, 0.35, 0.45),
-            Color("#613A20"),
-            true
-        )
-
+        var log_node := _add_box("WoodenLog%d" % i, log_positions[i], Vector3(1.4, 0.35, 0.45), Color("#613A20"), true)
         log_node.set_meta("quest_log", true)
         log_resources.append(log_node)
-
-        _add_quest_marker(
-            log_node,
-            "◆",
-            Vector3(0, 0.8, 0),
-            Color("#E6C16A")
-        )
+        _add_quest_marker(log_node, "◆", Vector3(0, 0.8, 0), Color("#E6C16A"))
 
 
-func _add_quest_marker(
-    target: Node3D,
-    marker_text: String,
-    offset: Vector3,
-    marker_color: Color
-) -> void:
+func _add_quest_marker(target: Node3D, marker_text: String, offset: Vector3, marker_color: Color) -> void:
     var marker := Node3D.new()
     marker.position = offset
     target.add_child(marker)
@@ -667,18 +482,11 @@ func _add_quest_marker(
     marker.add_child(label)
 
 
-func _add_box(
-    object_name: String,
-    p: Vector3,
-    s: Vector3,
-    c: Color,
-    solid: bool
-) -> Node3D:
+func _add_box(object_name: String, p: Vector3, s: Vector3, c: Color, solid: bool) -> Node3D:
     var parent: Node3D
 
     if solid:
         parent = StaticBody3D.new()
-
         var collision := CollisionShape3D.new()
         var shape := BoxShape3D.new()
         shape.size = s
@@ -702,11 +510,307 @@ func _add_box(
     parent.add_child(mesh_instance)
 
     return parent
+# ==================================================
+# INTERIOR ROOM
+# ==================================================
+
+func _build_interior_room() -> void:
+    var o := interior_origin
+
+    _add_box("InteriorFloor", o + Vector3(0, -0.08, 0), Vector3(12, 0.2, 12), Color("#927451"), true)
+    _add_box("InteriorBackWall", o + Vector3(0, 2, -6), Vector3(12, 4, 0.3), Color("#8B694A"), true)
+    _add_box("InteriorLeftWall", o + Vector3(-6, 2, 0), Vector3(0.3, 4, 12), Color("#9C7955"), true)
+    _add_box("InteriorRightWall", o + Vector3(6, 2, 0), Vector3(0.3, 4, 12), Color("#9C7955"), true)
+    _add_box("InteriorFrontLeft", o + Vector3(-4, 2, 6), Vector3(4, 4, 0.3), Color("#9C7955"), true)
+    _add_box("InteriorFrontRight", o + Vector3(4, 2, 6), Vector3(4, 4, 0.3), Color("#9C7955"), true)
+    _add_box("InteriorCounter", o + Vector3(0, 0.6, -3), Vector3(4, 1.1, 0.9), Color("#573820"), true)
+    _add_box("InteriorRug", o + Vector3(0, 0.04, 1), Vector3(4, 0.08, 3), Color("#8C3F35"), false)
+
+    var sign := Label3D.new()
+    sign.name = "InteriorExitSign"
+    sign.text = "EXIT"
+    sign.position = o + Vector3(0, 2.8, 4.8)
+    sign.pixel_size = 0.01
+    add_child(sign)
 
 
-# --------------------------------------------------
-# HUD AND CONTROLS
-# --------------------------------------------------
+func _enter_building(building_name: String) -> void:
+    if inside_building or not is_instance_valid(player):
+        return
+
+    exterior_return_position = player.global_position
+    inside_building = true
+    player.velocity = Vector3.ZERO
+    player.global_position = interior_origin + Vector3(0, 1, 3.5)
+
+    match building_name:
+        "Blacksmith":
+            _open_shop("weapons")
+        "ArmorShop":
+            _open_shop("armor")
+        "Tailor":
+            _message("The tailor's appearance services are coming later.")
+        "Hearthvale Inn":
+            _message("Welcome to the Hearthvale Inn.")
+        "Apothecary":
+            _message("The apothecary will sell potions in a later update.")
+        _:
+            _message("You entered %s." % building_name)
+
+
+func _leave_building() -> void:
+    if not inside_building or not is_instance_valid(player):
+        return
+
+    _close_overlay()
+    inside_building = false
+    player.velocity = Vector3.ZERO
+    player.global_position = exterior_return_position
+    _message("You returned to Hearthvale.")
+
+
+# ==================================================
+# SHOPS
+# ==================================================
+
+func _open_shop(shop_type: String) -> void:
+    active_shop = shop_type
+    _close_overlay()
+
+    var title := "BLACKSMITH — WEAPONS"
+    if shop_type == "armor":
+        title = "ARMOR SHOP"
+
+    var panel := _create_overlay(title)
+    var col := panel.get_node("Content") as VBoxContainer
+
+    var info := Label.new()
+    info.text = "Your Silver: %d" % silver
+    col.add_child(info)
+
+    if shop_type == "weapons":
+        for item_name in weapon_catalog.keys():
+            var item: Dictionary = weapon_catalog[item_name]
+            var button := Button.new()
+            button.text = "%s — %d Silver — +%d attack" % [
+                item_name,
+                int(item["price"]),
+                int(item["attack"])
+            ]
+            button.pressed.connect(_buy_weapon.bind(item_name))
+            col.add_child(button)
+    else:
+        for item_name in armor_catalog.keys():
+            var item: Dictionary = armor_catalog[item_name]
+            var button := Button.new()
+            button.text = "%s — %d Silver — +%d defense" % [
+                item_name,
+                int(item["price"]),
+                int(item["defense"])
+            ]
+            button.pressed.connect(_buy_armor.bind(item_name))
+            col.add_child(button)
+
+    var equipment_button := Button.new()
+    equipment_button.text = "Open Equipment"
+    equipment_button.pressed.connect(_open_equipment_menu)
+    col.add_child(equipment_button)
+
+    _add_close_button(col)
+
+
+func _buy_weapon(item_name: String) -> void:
+    if not weapon_catalog.has(item_name):
+        return
+
+    var item: Dictionary = weapon_catalog[item_name]
+    var price := int(item["price"])
+
+    if owned_weapons.has(item_name):
+        _message("You already own %s." % item_name)
+    elif silver < price:
+        _message("You need %d Silver to buy %s." % [price, item_name])
+    else:
+        silver -= price
+        owned_weapons.append(item_name)
+        _message("Purchased %s. Open Equipment to equip it." % item_name)
+
+    _refresh()
+    _open_shop("weapons")
+
+
+func _buy_armor(item_name: String) -> void:
+    if not armor_catalog.has(item_name):
+        return
+
+    var item: Dictionary = armor_catalog[item_name]
+    var price := int(item["price"])
+
+    if owned_armor.has(item_name):
+        _message("You already own %s." % item_name)
+    elif silver < price:
+        _message("You need %d Silver to buy %s." % [price, item_name])
+    else:
+        silver -= price
+        owned_armor.append(item_name)
+        _message("Purchased %s. Open Equipment to equip it." % item_name)
+
+    _refresh()
+    _open_shop("armor")
+
+
+# ==================================================
+# EQUIPMENT MENU
+# ==================================================
+
+func _open_equipment_menu() -> void:
+    _close_overlay()
+
+    var panel := _create_overlay("HERO EQUIPMENT")
+    var col := panel.get_node("Content") as VBoxContainer
+
+    var summary := Label.new()
+    summary.text = (
+        "Weapon: %s (+%d attack)\n" +
+        "Armor: %s (+%d defense)\n" +
+        "Silver: %d"
+    ) % [
+        equipped_weapon,
+        weapon_attack_bonus,
+        equipped_armor,
+        armor_defense_bonus,
+        silver
+    ]
+    col.add_child(summary)
+
+    var weapon_title := Label.new()
+    weapon_title.text = "WEAPON SLOT"
+    col.add_child(weapon_title)
+
+    for item_name in owned_weapons:
+        var button := Button.new()
+        button.text = "Equip " + item_name
+        button.pressed.connect(_equip_weapon.bind(item_name))
+        col.add_child(button)
+
+    var armor_title := Label.new()
+    armor_title.text = "ARMOR SLOT"
+    col.add_child(armor_title)
+
+    for item_name in owned_armor:
+        var button := Button.new()
+        button.text = "Equip " + item_name
+        button.pressed.connect(_equip_armor.bind(item_name))
+        col.add_child(button)
+
+    _add_close_button(col)
+
+
+func _equip_weapon(item_name: String) -> void:
+    if not owned_weapons.has(item_name):
+        return
+
+    equipped_weapon = item_name
+    weapon_attack_bonus = int(
+        weapon_catalog.get(item_name, {}).get("attack", 0)
+    )
+
+    _message("Equipped %s. Attack bonus: +%d." % [
+        item_name,
+        weapon_attack_bonus
+    ])
+
+    _refresh()
+    _open_equipment_menu()
+
+
+func _equip_armor(item_name: String) -> void:
+    if not owned_armor.has(item_name):
+        return
+
+    equipped_armor = item_name
+    armor_defense_bonus = int(
+        armor_catalog.get(item_name, {}).get("defense", 0)
+    )
+
+    _message("Equipped %s. Defense bonus: +%d." % [
+        item_name,
+        armor_defense_bonus
+    ])
+
+    _refresh()
+    _open_equipment_menu()
+
+
+func _create_overlay(title_text: String) -> PanelContainer:
+    var layer := get_node_or_null("GameMenus") as CanvasLayer
+
+    if layer == null:
+        layer = CanvasLayer.new()
+        layer.name = "GameMenus"
+        add_child(layer)
+
+    var panel := PanelContainer.new()
+    panel.name = "ActiveMenu"
+    panel.anchor_left = 0.5
+    panel.anchor_right = 0.5
+    panel.anchor_top = 0.5
+    panel.anchor_bottom = 0.5
+    panel.offset_left = -230
+    panel.offset_right = 230
+    panel.offset_top = -250
+    panel.offset_bottom = 250
+    layer.add_child(panel)
+
+    active_overlay = panel
+
+    var outer := VBoxContainer.new()
+    panel.add_child(outer)
+
+    var heading := Label.new()
+    heading.text = title_text
+    heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    outer.add_child(heading)
+
+    var scroll := ScrollContainer.new()
+    scroll.custom_minimum_size = Vector2(420, 350)
+    outer.add_child(scroll)
+
+    var content := VBoxContainer.new()
+    content.name = "Content"
+    content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    scroll.add_child(content)
+
+    return panel
+
+
+func _add_close_button(container: VBoxContainer) -> void:
+    var close_button := Button.new()
+    close_button.text = "Close Menu"
+    close_button.pressed.connect(_close_overlay)
+    container.add_child(close_button)
+
+    if inside_building:
+        var exit_button := Button.new()
+        exit_button.text = "Leave Building"
+        exit_button.pressed.connect(_leave_building)
+        container.add_child(exit_button)
+
+
+func _close_overlay() -> void:
+    var layer := get_node_or_null("GameMenus")
+
+    if layer != null:
+        var old := layer.get_node_or_null("ActiveMenu")
+        if old != null:
+            old.queue_free()
+
+    active_overlay = null
+
+
+# ==================================================
+# HUD
+# ==================================================
 
 func _make_hud() -> void:
     var layer := CanvasLayer.new()
@@ -770,13 +874,12 @@ func _unhandled_input(event: InputEvent) -> void:
         _interact()
         get_viewport().set_input_as_handled()
 
-
-# --------------------------------------------------
+# ==================================================
 # COMBAT
-# --------------------------------------------------
+# ==================================================
 
 func _attack() -> void:
-    if not is_instance_valid(player):
+    if not is_instance_valid(player) or inside_building:
         return
 
     var nearest: Node = null
@@ -793,25 +896,24 @@ func _attack() -> void:
                 best_distance = distance
                 nearest = node
 
-    if nearest != null:
-        var damage := 35
-
-        if nearest.get("is_boss"):
-            damage = 20
-
-        nearest.call("take_hit", damage)
-        _message(
-            "%s attacks %s." % [
-                hero_class,
-                str(nearest.get("enemy_name"))
-            ]
-        )
-    else:
+    if nearest == null:
         _message("Move closer to an enemy to attack.")
+        return
+
+    var damage := 35 + weapon_attack_bonus
+
+    if bool(nearest.get("is_boss")):
+        damage = 20 + int(weapon_attack_bonus * 0.5)
+
+    nearest.call("take_hit", damage)
+    _message("%s attacks %s." % [
+        hero_class,
+        str(nearest.get("enemy_name"))
+    ])
 
 
 func enemy_defeated(e: Node) -> void:
-    if mob_quest_stage == 1 and e.has_meta("clear_woods_target") and not e.get("is_boss"):
+    if mob_quest_stage == 1 and e.has_meta("clear_woods_target") and not bool(e.get("is_boss")):
         mobs_defeated += 1
 
         if mobs_defeated >= MOBS_REQUIRED:
@@ -824,36 +926,24 @@ func enemy_defeated(e: Node) -> void:
         quest3_stage = 2
         _message("Mossjaw defeated! Return to the Village Elder.")
 
-    if quest5_stage == 1 and e.has_meta("path_quest_target") and not e.get("is_boss"):
+    if quest5_stage == 1 and e.has_meta("path_quest_target") and not bool(e.get("is_boss")):
         path_mobs_defeated += 1
 
         if path_mobs_defeated >= PATH_MOBS_REQUIRED:
             quest5_stage = 2
             _message("The path is clear! Return to the Village Elder.")
         else:
-            _message(
-                "Keep the Path Safe: %d/5 defeated." %
-                path_mobs_defeated
-            )
+            _message("Keep the Path Safe: %d/5 defeated." % path_mobs_defeated)
 
-    xp += 30 if e.get("is_boss") else 10
-    silver += 100 if e.get("is_boss") else 15
+    xp += 30 if bool(e.get("is_boss")) else 10
+    silver += 100 if bool(e.get("is_boss")) else 15
 
     _refresh()
-
-    _message(
-        "%s defeated! Earned XP and Silver. Combat does not award Chore Gold."
-        % str(e.get("enemy_name"))
-    )
+    _message("%s defeated! Earned XP and Silver. Combat does not award Chore Gold." % str(e.get("enemy_name")))
 
 
 func _spawn_quest_mobs() -> void:
-    var names := [
-        "Forest Slime",
-        "Woodland Goblin",
-        "Thornwolf"
-    ]
-
+    var names := ["Forest Slime", "Woodland Goblin", "Thornwolf"]
     var positions := [
         Vector3(-7, 1, 23),
         Vector3(0, 1, 27),
@@ -897,7 +987,6 @@ func _spawn_supply_crates() -> void:
             Color("#8B5229"),
             true
         )
-
         supply_crates.append(crate)
 
 
@@ -929,9 +1018,9 @@ func _spawn_path_mobs() -> void:
         add_child(mob)
 
 
-# --------------------------------------------------
+# ==================================================
 # INTERACTIONS AND QUEST PROGRESSION
-# --------------------------------------------------
+# ==================================================
 
 func _interact() -> void:
     if not is_instance_valid(player):
@@ -939,7 +1028,11 @@ func _interact() -> void:
 
     var p: Vector3 = player.global_position
 
-    # Collect logs for Quest 1
+    # When indoors, INTERACT exits the building.
+    if inside_building:
+        _leave_building()
+        return
+
     if quest_stage == 1:
         var closest_log: Node3D = null
         var closest_distance := 3.5
@@ -947,7 +1040,6 @@ func _interact() -> void:
         for item in log_resources:
             if is_instance_valid(item):
                 var d := _flat_distance(p, item.global_position)
-
                 if d <= closest_distance:
                     closest_distance = d
                     closest_log = item
@@ -966,17 +1058,15 @@ func _interact() -> void:
             _refresh()
             return
 
-    # Collect supply crates for Quest 4
     if quest4_stage == 1:
         var closest_crate: Node3D = null
-        var closest_distance := 3.5
+        var crate_distance := 3.5
 
         for item in supply_crates:
             if is_instance_valid(item):
                 var d := _flat_distance(p, item.global_position)
-
-                if d <= closest_distance:
-                    closest_distance = d
+                if d <= crate_distance:
+                    crate_distance = d
                     closest_crate = item
 
         if closest_crate != null:
@@ -993,137 +1083,127 @@ func _interact() -> void:
             _refresh()
             return
 
-    # Talk to the Village Elder
     if is_instance_valid(elder) and _flat_distance(p, elder.global_position) <= 5.5:
         if quest_stage == 0:
             quest_stage = 1
             _message("Village Elder: Gather 3 wooden logs for Hearthvale.")
-
         elif quest_stage == 1:
-            _message(
-                "Village Elder: Bring me 3 logs. Collected: %d/3."
-                % logs_collected
-            )
-
+            _message("Village Elder: Bring me 3 logs. Collected: %d/3." % logs_collected)
         elif quest_stage == 2:
             quest_stage = 3
             xp += 50
             silver += 75
             _message("Quest complete: A New Beginning! +50 XP, +75 Silver.")
-
         elif mob_quest_stage == 0:
             mob_quest_stage = 1
             mobs_defeated = 0
             _spawn_quest_mobs()
             _message("Quest 2: Defeat 3 monsters in Whispering Woods.")
-
         elif mob_quest_stage == 1:
             _message("Defeat the monsters: %d/3." % mobs_defeated)
-
         elif mob_quest_stage == 2:
             mob_quest_stage = 3
             xp += 75
             silver += 100
             _message("Quest complete: Clear the Woods! +75 XP, +100 Silver.")
-
         elif quest3_stage == 0:
             quest3_stage = 1
             _spawn_mossjaw()
             _message("Quest 3: Defeat Mossjaw, then return to the Elder.")
-
         elif quest3_stage == 1:
             _message("Mossjaw is still in the woods. Defeat him!")
-
         elif quest3_stage == 2:
             quest3_stage = 3
             xp += 150
             silver += 200
             _message("Quest complete: Mossjaw's Challenge! +150 XP, +200 Silver.")
-
         elif quest4_stage == 0:
             quest4_stage = 1
             crates_found = 0
             _spawn_supply_crates()
             _message("Quest 4: Find the 3 missing supply crates.")
-
         elif quest4_stage == 1:
             _message("Find the missing crates: %d/3." % crates_found)
-
         elif quest4_stage == 2:
             quest4_stage = 3
             xp += 100
             silver += 125
             _message("Quest complete: Lost Supplies! +100 XP, +125 Silver.")
-
         elif quest5_stage == 0:
             quest5_stage = 1
             path_mobs_defeated = 0
             _spawn_path_mobs()
             _message("Quest 5: Defeat 5 monsters along the path.")
-
         elif quest5_stage == 1:
-            _message(
-                "Secure the path: %d/5 monsters defeated."
-                % path_mobs_defeated
-            )
-
+            _message("Secure the path: %d/5 monsters defeated." % path_mobs_defeated)
         elif quest5_stage == 2:
             quest5_stage = 3
             xp += 125
             silver += 150
             _message("Quest complete: Keep the Path Safe! +125 XP, +150 Silver.")
-
         else:
             _message("Hearthvale is safer because of you, hero!")
 
         _refresh()
         return
 
-    # Town interactions
-    if _flat_distance(p, Vector3(0, 0, -5)) < 5:
-        _message("Village fountain: Welcome to Hearthvale!")
-
-    elif _flat_distance(p, Vector3(-8, 0, -7)) < 5:
-        _message("Blacksmith: Weapon shop coming soon.")
-
-    elif _flat_distance(p, Vector3(8, 0, -7)) < 5:
-        _message("Armor shop: Class-specific gear coming soon.")
-
+    # Town building entrances.
+    if _flat_distance(p, Vector3(-8, 0, -7)) < 5.0:
+        _enter_building("Blacksmith")
+    elif _flat_distance(p, Vector3(8, 0, -7)) < 5.0:
+        _enter_building("ArmorShop")
     elif _flat_distance(p, Vector3(8, 0, 1)) < 4.5:
-        _message("Tailor: Appearance customization coming soon.")
-
+        _enter_building("Tailor")
+    elif _flat_distance(p, Vector3(-15, 0, -20)) < 4.5:
+        _enter_building("Baker")
+    elif _flat_distance(p, Vector3(15, 0, -20)) < 4.5:
+        _enter_building("GeneralStore")
+    elif _flat_distance(p, Vector3(-17, 0, -33)) < 4.5:
+        _enter_building("Hearthvale Inn")
+    elif _flat_distance(p, Vector3(17, 0, -33)) < 4.5:
+        _enter_building("Apothecary")
+    elif _flat_distance(p, Vector3(-13, 0, -44)) < 4.5:
+        _enter_building("Town House West")
+    elif _flat_distance(p, Vector3(13, 0, -44)) < 4.5:
+        _enter_building("Town House East")
+    elif _flat_distance(p, Vector3(0, 0, -5)) < 5.0:
+        _message("Village fountain: Welcome to Hearthvale!")
     elif p.z < -48:
-        _message("Castle district: The castle will host future quests.")
-
+        _message("Castle district: the castle interior is planned for a later update.")
     elif p.z > 12:
         _message("Whispering Woods: Explore the path and gather resources.")
-
     else:
-        _message("Explore Hearthvale and interact with people and objects.")
+        _message("Explore Hearthvale. Interact near a building, villager, or quest object.")
+
+    _refresh()
 
 
 func _flat_distance(a: Vector3, b: Vector3) -> float:
     return Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z))
 
 
-# --------------------------------------------------
+# ==================================================
 # HUD REFRESH
-# --------------------------------------------------
+# ==================================================
 
 func _refresh() -> void:
     var hp_value := 100
 
     if is_instance_valid(player):
-        hp_value = int(player.get("hp"))
+        var health_value = player.get("current_health")
+        if health_value != null:
+            hp_value = int(health_value)
 
     if is_instance_valid(status_label):
-        status_label.text = "HERO: %s  |  HP: %d/100" % [
+        status_label.text = "HERO: %s | HP: %d | Weapon: %s | Armor: %s" % [
             hero_class,
-            hp_value
+            hp_value,
+            equipped_weapon,
+            equipped_armor
         ]
 
     if is_instance_valid(economy_label):
-        economy_label.text = "XP: %d  |  Silver: %d  |  Chore Gold: %d" % [
+        economy_label.text = "XP: %d | Silver: %d | Chore Gold: %d" % [
             xp,
             silver,
             chore_gold
@@ -1134,49 +1214,34 @@ func _refresh() -> void:
 
     if quest_stage == 0:
         quest_label.text = "Quest 1: Talk to the Village Elder"
-
     elif quest_stage == 1:
         quest_label.text = "Quest 1: Collect wooden logs (%d/3)" % logs_collected
-
     elif quest_stage == 2:
         quest_label.text = "Quest 1: Return to the Village Elder"
-
     elif mob_quest_stage == 0:
         quest_label.text = "Quest 1 complete: Talk to the Elder for Quest 2"
-
     elif mob_quest_stage == 1:
         quest_label.text = "Quest 2: Defeat monsters (%d/3)" % mobs_defeated
-
     elif mob_quest_stage == 2:
         quest_label.text = "Quest 2: Return to the Village Elder"
-
     elif quest3_stage == 0:
         quest_label.text = "Quest 2 complete: Talk to the Elder for Quest 3"
-
     elif quest3_stage == 1:
         quest_label.text = "Quest 3: Defeat Mossjaw"
-
     elif quest3_stage == 2:
         quest_label.text = "Quest 3: Return to the Village Elder"
-
     elif quest4_stage == 0:
         quest_label.text = "Quest 3 complete: Talk to the Elder for Quest 4"
-
     elif quest4_stage == 1:
         quest_label.text = "Quest 4: Find supply crates (%d/3)" % crates_found
-
     elif quest4_stage == 2:
         quest_label.text = "Quest 4: Return to the Village Elder"
-
     elif quest5_stage == 0:
         quest_label.text = "Quest 4 complete: Talk to the Elder for Quest 5"
-
     elif quest5_stage == 1:
         quest_label.text = "Quest 5: Defeat path monsters (%d/5)" % path_mobs_defeated
-
     elif quest5_stage == 2:
         quest_label.text = "Quest 5: Return to the Village Elder"
-
     else:
         quest_label.text = "Demo complete: All 5 quests finished!"
 
