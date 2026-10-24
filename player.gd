@@ -29,7 +29,7 @@ var joystick_knob: Control
 
 
 func _ready() -> void:
-    # Temporary visible hero
+    # Temporary visible hero.
     var body_mesh := MeshInstance3D.new()
     body_mesh.name = "TemporaryHeroVisual"
 
@@ -44,7 +44,7 @@ func _ready() -> void:
     body_mesh.material_override = body_material
     add_child(body_mesh)
 
-    # Collision
+    # Hero collision.
     var collision := CollisionShape3D.new()
     var capsule_shape := CapsuleShape3D.new()
     capsule_shape.radius = 0.45
@@ -53,18 +53,14 @@ func _ready() -> void:
     collision.position.y = 0.9
     add_child(collision)
 
-    # Camera pivot
-    var pivot := Node3D.new()
-    pivot.name = "CameraPivot"
-    pivot.position = Vector3(0, camera_height, 0)
-    add_child(pivot)
-
+    # Camera is a child of the hero, but its orbit
+    # position is calculated in world coordinates.
     game_camera = Camera3D.new()
     game_camera.name = "GameCamera"
-    pivot.add_child(game_camera)
+    add_child(game_camera)
 
-    _update_camera()
     _create_touch_controls()
+    _update_camera()
 
 
 func _physics_process(delta: float) -> void:
@@ -78,13 +74,12 @@ func _physics_process(delta: float) -> void:
     if joystick_active:
         input_vector = joystick_vector
 
-    # Camera-relative movement
+    # Use camera direction, ignoring its vertical angle.
     var forward := -game_camera.global_basis.z
     var right := game_camera.global_basis.x
 
     forward.y = 0.0
     right.y = 0.0
-
     forward = forward.normalized()
     right = right.normalized()
 
@@ -103,6 +98,11 @@ func _physics_process(delta: float) -> void:
         velocity.y = 0.0
 
     move_and_slide()
+
+
+func _process(_delta: float) -> void:
+    # Keep the camera orbit centered on the moving hero.
+    _update_camera()
 
 
 func _create_touch_controls() -> void:
@@ -124,7 +124,9 @@ func _create_touch_controls() -> void:
     layer.add_child(joystick_base)
 
     var base_panel := Panel.new()
-    base_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    base_panel.set_anchors_and_offsets_preset(
+        Control.PRESET_FULL_RECT
+    )
     base_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
     var base_style := StyleBoxFlat.new()
@@ -141,7 +143,9 @@ func _create_touch_controls() -> void:
     joystick_base.add_child(joystick_knob)
 
     var knob_panel := Panel.new()
-    knob_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    knob_panel.set_anchors_and_offsets_preset(
+        Control.PRESET_FULL_RECT
+    )
     knob_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
     var knob_style := StyleBoxFlat.new()
@@ -153,7 +157,7 @@ func _create_touch_controls() -> void:
 
 func _input(event: InputEvent) -> void:
     if event is InputEventScreenTouch:
-        if event.pressed:1
+        if event.pressed:
             _handle_touch_start(event.index, event.position)
         else:
             _handle_touch_end(event.index)
@@ -173,12 +177,19 @@ func _input(event: InputEvent) -> void:
             _handle_touch_drag(-2, event.position)
 
 
-func _handle_touch_start(pointer_id: int, position: Vector2) -> void:
+func _handle_touch_start(
+    pointer_id: int,
+    position: Vector2
+) -> void:
     var screen_size := get_viewport().get_visible_rect().size
 
+    # Left side: joystick.
     if position.x < screen_size.x * 0.42:
         if not joystick_active and joystick_pointer == -1:
-            var center := joystick_base.global_position + joystick_base.size * 0.5
+            var center := (
+                joystick_base.global_position
+                + joystick_base.size * 0.5
+            )
 
             if position.distance_to(center) < 115.0:
                 joystick_active = true
@@ -187,12 +198,16 @@ func _handle_touch_start(pointer_id: int, position: Vector2) -> void:
                 _update_joystick(position)
                 return
 
+    # Right side: camera orbit.
     elif camera_pointer == -1:
         camera_pointer = pointer_id
         camera_last_position = position
 
 
-func _handle_touch_drag(pointer_id: int, position: Vector2) -> void:
+func _handle_touch_drag(
+    pointer_id: int,
+    position: Vector2
+) -> void:
     if pointer_id == joystick_pointer and joystick_active:
         _update_joystick(position)
 
@@ -200,10 +215,8 @@ func _handle_touch_drag(pointer_id: int, position: Vector2) -> void:
         var drag_delta := position - camera_last_position
         camera_last_position = position
 
-        # Horizontal swipe orbits around the hero.
         camera_yaw -= drag_delta.x * camera_sensitivity
 
-        # Vertical swipe changes the viewing angle, within limits.
         camera_pitch = clampf(
             camera_pitch - drag_delta.y * camera_sensitivity,
             -0.45,
@@ -211,8 +224,6 @@ func _handle_touch_drag(pointer_id: int, position: Vector2) -> void:
         )
 
         _update_camera()
-
-
 
 
 func _handle_touch_end(pointer_id: int) -> void:
@@ -237,18 +248,26 @@ func _update_joystick(touch_position: Vector2) -> void:
     joystick_knob.position = Vector2(40, 40) + difference
 
 
-
-
 func _update_camera() -> void:
     if not is_instance_valid(game_camera):
         return
 
-    # Aim at a point above the hero.
-    var target := global_position + Vector3(0.0, 1.2, 0.0)
+    if not game_camera.is_inside_tree():
+        return
 
-    # Calculate the camera orbit using yaw and pitch.
-    var horizontal_distance := camera_distance * cos(camera_pitch)
-    var vertical_distance := camera_distance * sin(camera_pitch)
+    # Aim at the hero's upper body.
+    var target := global_position + Vector3(
+        0.0,
+        camera_height - 1.6,
+        0.0
+    )
+
+    var horizontal_distance := (
+        camera_distance * cos(camera_pitch)
+    )
+    var vertical_distance := (
+        camera_distance * sin(camera_pitch)
+    )
 
     var offset := Vector3(
         sin(camera_yaw) * horizontal_distance,
@@ -256,11 +275,7 @@ func _update_camera() -> void:
         cos(camera_yaw) * horizontal_distance
     )
 
-    # Set the camera's world position directly.
+    # Position camera behind the hero at a fixed distance.
     game_camera.global_position = target + offset
-
-    # Always face the hero.
     game_camera.look_at(target, Vector3.UP)
     game_camera.current = true
-
-
