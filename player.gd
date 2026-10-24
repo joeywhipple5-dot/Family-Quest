@@ -48,6 +48,7 @@ var _joystick_center := Vector2.ZERO
 var _joystick_radius := 65.0
 
 var _model_root: Node3D
+var _imported_character_scene: Node3D
 var _skeleton: Skeleton3D
 var _animation_player: AnimationPlayer
 
@@ -102,8 +103,12 @@ func _physics_process(delta: float) -> void:
 	if world_move.length_squared() <= 0.001:
 		rate = deceleration
 
-	velocity.x = move_toward(velocity.x, world_move.x * move_speed, rate * delta)
-	velocity.z = move_toward(velocity.z, world_move.z * move_speed, rate * delta)
+	velocity.x = move_toward(
+		velocity.x, world_move.x * move_speed, rate * delta
+	)
+	velocity.z = move_toward(
+		velocity.z, world_move.z * move_speed, rate * delta
+	)
 
 	if not is_on_floor():
 		velocity.y -= gravity_strength * delta
@@ -257,7 +262,10 @@ func _load_character() -> void:
 	var packed := resource as PackedScene
 
 	if packed == null:
-		push_warning("Could not load character as a PackedScene: " + character_scene_path)
+		push_warning(
+			"Could not load character as a PackedScene: "
+			+ character_scene_path
+		)
 		return
 
 	_model_root = Node3D.new()
@@ -268,16 +276,14 @@ func _load_character() -> void:
 	_model_root.add_child(instance)
 
 	if instance is Node3D:
-		var visual := instance as Node3D
-		visual.position = model_local_position
-		visual.scale = Vector3.ONE * character_scale
+		_imported_character_scene = instance as Node3D
+		_imported_character_scene.position = model_local_position
+		_imported_character_scene.scale = Vector3.ONE * character_scale
 
-	_find_character_nodes(_model_root)
+	_find_character_nodes(_imported_character_scene)
 
 
 func _find_character_nodes(node: Node) -> void:
-	# Find an AnimationPlayer first. The skeleton is searched separately
-	# so we can report what the imported model actually contains.
 	if node is AnimationPlayer and _animation_player == null:
 		_animation_player = node as AnimationPlayer
 
@@ -296,6 +302,12 @@ func _find_animations() -> void:
 	if _animation_player == null:
 		push_warning("No AnimationPlayer found in character model.")
 		return
+
+	if _imported_character_scene != null:
+		# Animation tracks must resolve from the imported GLB scene root.
+		_animation_player.root_node = _animation_player.get_path_to(
+			_imported_character_scene
+		)
 
 	var animations := _animation_player.get_animation_list()
 
@@ -318,9 +330,9 @@ func _find_animations() -> void:
 			_death_animation_name = StringName(animation_name)
 
 	print("=== CHARACTER ANIMATION DIAGNOSTICS ===")
-	print("Model: ", _model_root.get_path() if _model_root else "MISSING")
-	print("Skeleton: ", _skeleton.get_path() if _skeleton else "MISSING")
-	print("AnimationPlayer: ", _animation_player.get_path())
+	print("Imported scene: ", _imported_character_scene)
+	print("Skeleton: ", _skeleton)
+	print("AnimationPlayer: ", _animation_player)
 	print("Animation root: ", _animation_player.root_node)
 	print("Available animations: ", animations)
 
@@ -342,14 +354,19 @@ func _find_animations() -> void:
 
 		print("Thigh/calf track count: ", leg_tracks)
 
+		# Start the animation from the beginning.
 		if walk.length > 0.0:
 			_animation_player.play(_walk_animation_name)
 			_animation_player.seek(0.0, true)
 
+			# If there is no idle clip, let the walk clip continue.
 			if _idle_animation_name == &"":
 				_animation_player.pause()
 	else:
-		push_warning("No walk animation found. Available animations: " + str(animations))
+		push_warning(
+			"No walk animation found. Available animations: "
+			+ str(animations)
+		)
 
 	if _skeleton == null:
 		push_warning("No Skeleton3D found in the imported character.")
@@ -370,12 +387,16 @@ func _update_character_animation(moving: bool) -> void:
 			_animation_player.play(_walk_animation_name)
 
 	elif _idle_animation_name != &"":
-		if _animation_player.current_animation != String(_idle_animation_name):
+		if (
+			_animation_player.current_animation
+			!= String(_idle_animation_name)
+		):
 			_animation_player.play(_idle_animation_name)
 
 	elif _walk_animation_name != &"":
 		if (
-			_animation_player.current_animation != String(_walk_animation_name)
+			_animation_player.current_animation
+			!= String(_walk_animation_name)
 			or _animation_player.is_playing()
 		):
 			_animation_player.play(_walk_animation_name)
@@ -389,7 +410,9 @@ func _create_camera() -> void:
 	add_child(_camera_pivot)
 
 	_camera_pivot.top_level = true
-	_camera_pivot.global_position = global_position + Vector3(0.0, camera_height, 0.0)
+	_camera_pivot.global_position = (
+		global_position + Vector3(0.0, camera_height, 0.0)
+	)
 
 	_camera = Camera3D.new()
 	_camera.name = "PlayerCamera"
@@ -407,7 +430,9 @@ func _apply_camera_rotation() -> void:
 
 func _update_camera() -> void:
 	if _camera_pivot != null:
-		_camera_pivot.global_position = global_position + Vector3(0.0, camera_height, 0.0)
+		_camera_pivot.global_position = (
+			global_position + Vector3(0.0, camera_height, 0.0)
+		)
 		_apply_camera_rotation()
 
 
@@ -506,7 +531,10 @@ func _reset_joystick_visual() -> void:
 
 func _update_health_label() -> void:
 	if _health_label != null:
-		_health_label.text = "HP  %d / %d" % [current_health, max_health]
+		_health_label.text = "HP  %d / %d" % [
+			current_health,
+			max_health
+		]
 
 
 func _die() -> void:
