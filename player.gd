@@ -1,578 +1,481 @@
 
 extends CharacterBody3D
 
-# =========================================================
+# ==========================================
 # FAMILY QUEST - PLAYER CONTROLLER
-# Godot 4.3 - Android
-# =========================================================
+# Godot 4.3 | Android + Keyboard
+# ==========================================
 
-var hp: int = 100
-var max_hp: int = 100
+@export var hero_class: String = "Warrior"
+@export var hero_gender: String = "male"
 
-var hero_class: String = "Warrior"
-var hero_gender: String = "male"
-
-@export var move_speed: float = 7.0
-@export var run_speed: float = 10.0
+@export var max_hp: int = 100
+@export var move_speed: float = 5.0
+@export var run_speed: float = 8.0
 @export var gravity: float = 22.0
-@export var camera_sensitivity: float = 0.008
+@export var turn_speed: float = 10.0
+
 @export var camera_distance: float = 6.0
 @export var camera_height: float = 2.8
+@export var camera_sensitivity: float = 0.008
 
-# Change this if your GLB filename changes.
-@export var hero_model_path: String = "res://artwork/FamilyQuest_Warrior_Hero_Rigged-2.glb"
+@export var hero_model_path: String = \
+"res://artwork/FamilyQuest_Walk_Animation_Fresh_Download.glb"
 
-# Adjust these if the imported model is too large or too small.
-@export var hero_model_scale: float = 1.0
+@export var hero_model_scale: float = 0.3
 @export var hero_model_offset: Vector3 = Vector3.ZERO
 
-var game_camera: Camera3D
-var camera_yaw: float = 0.0
-var camera_pitch: float = -0.12
-
-var joystick_active: bool = false
-var joystick_pointer: int = -1
-var joystick_origin: Vector2 = Vector2.ZERO
-var joystick_vector: Vector2 = Vector2.ZERO
-
-var camera_pointer: int = -1
-var camera_last_position: Vector2 = Vector2.ZERO
-
-var joystick_base: Control
-var joystick_knob: Control
-
-var hero_visual: Node3D
-var animation_player: AnimationPlayer
-
-var is_attacking: bool = false
+var hp: int = 100
 var is_dead: bool = false
 
-var idle_animation: StringName = &""
+var hero_model: Node3D
+var animation_player: AnimationPlayer
+var skeleton: Skeleton3D
+
 var walk_animation: StringName = &""
-var run_animation: StringName = &""
+var idle_animation: StringName = &""
 var attack_animation: StringName = &""
 var death_animation: StringName = &""
 
-var attack_timer: float = 0.0
-var attack_duration: float = 0.65
+var mobile_move_input: Vector2 = Vector2.ZERO
+var camera_yaw: float = 0.0
+var camera_pitch: float = -0.15
+
+var camera_pivot: Node3D
+var game_camera: Camera3D
+
+var joystick_finger: int = -1
+var camera_finger: int = -1
+var joystick_origin: Vector2 = Vector2.ZERO
+var joystick_position: Vector2 = Vector2.ZERO
+
+var joystick_radius: float = 90.0
+var camera_drag_enabled: bool = true
+
+var previous_movement: bool = false
 
 
 func _ready() -> void:
-	hp = max_hp
+    hp = max_hp
 
-	_load_hero_model()
-	_create_collision()
-	_create_camera()
-	_create_touch_controls()
+    _create_collision()
+    _load_hero_model()
+    _create_camera()
+    _find_hero_animations()
 
-	_update_camera()
+    if walk_animation != &"":
+        _play_idle_or_rest_pose()
 
-	if idle_animation != &"":
-		_play_animation(idle_animation)
-
-
-# =========================================================
-# LOAD HERO MODEL
-# =========================================================
-
-func _load_hero_model() -> void:
-	if not ResourceLoader.exists(hero_model_path):
-		push_warning("Hero model not found: " + hero_model_path)
-		_create_fallback_visual()
-		return
-
-	var resource: Resource = load(hero_model_path)
-
-	if resource == null or not resource is PackedScene:
-		push_warning("Hero model could not be loaded as a PackedScene.")
-		_create_fallback_visual()
-		return
-
-	var packed_model: PackedScene = resource as PackedScene
-	var instance: Node = packed_model.instantiate()
-
-	if not instance is Node3D:
-		push_warning("Hero model root is not a Node3D.")
-		instance.queue_free()
-		_create_fallback_visual()
-		return
-
-	hero_visual = instance as Node3D
-	hero_visual.name = "HeroVisual"
-	add_child(hero_visual)
-
-	hero_visual.position = hero_model_offset
-	hero_visual.scale = Vector3.ONE * hero_model_scale
-
-	_find_hero_animations()
-
-	print("Family Quest hero model loaded: ", hero_model_path)
-
-	if animation_player == null:
-		print("No AnimationPlayer found in the hero model.")
-
-	if idle_animation == &"":
-		print("No idle animation found.")
+    add_to_group("player")
 
 
-# =========================================================
-# FALLBACK VISUAL
-# Used only if the model cannot be loaded.
-# =========================================================
-
-func _create_fallback_visual() -> void:
-	hero_visual = Node3D.new()
-	hero_visual.name = "FallbackHero"
-	add_child(hero_visual)
-
-	var body_mesh := CapsuleMesh.new()
-	body_mesh.radius = 0.4
-	body_mesh.height = 1.7
-
-	var body := MeshInstance3D.new()
-	body.name = "FallbackBody"
-	body.mesh = body_mesh
-
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.15, 0.35, 0.85)
-	body.material_override = material
-	body.position.y = 0.9
-
-	hero_visual.add_child(body)
-
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.23
-	head_mesh.height = 0.46
-
-	var head := MeshInstance3D.new()
-	head.name = "FallbackHead"
-	head.mesh = head_mesh
-	head.material_override = material
-	head.position.y = 1.85
-
-	hero_visual.add_child(head)
-
-
-# =========================================================
-# COLLISION
-# =========================================================
+# ==========================================
+# CHARACTER MODEL
+# ==========================================
 
 func _create_collision() -> void:
-	var collision := CollisionShape3D.new()
-	collision.name = "PlayerCollision"
+    var collision := CollisionShape3D.new()
+    collision.name = "PlayerCollision"
 
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.4
-	capsule.height = 1.8
+    var capsule := CapsuleShape3D.new()
+    capsule.radius = 0.35
+    capsule.height = 1.8
 
-	collision.shape = capsule
-	collision.position.y = 0.9
-
-	add_child(collision)
-
-
-# =========================================================
-# CAMERA
-# =========================================================
-
-func _create_camera() -> void:
-	game_camera = Camera3D.new()
-	game_camera.name = "GameCamera"
-	game_camera.current = true
-	game_camera.fov = 75.0
-	add_child(game_camera)
+    collision.shape = capsule
+    collision.position.y = 0.9
+    add_child(collision)
 
 
-func _update_camera() -> void:
-	if game_camera == null:
-		return
+func _load_hero_model() -> void:
+    if not ResourceLoader.exists(hero_model_path):
+        push_error("Family Quest: Hero GLB not found: " + hero_model_path)
+        _create_fallback_model()
+        return
 
-	var target := global_position + Vector3.UP * camera_height
+    var packed_scene := load(hero_model_path) as PackedScene
 
-	var horizontal_distance := camera_distance * cos(camera_pitch)
-	var vertical_distance := camera_distance * sin(camera_pitch)
+    if packed_scene == null:
+        push_error("Family Quest: Could not load hero GLB.")
+        _create_fallback_model()
+        return
 
-	var offset := Vector3(
-		sin(camera_yaw) * horizontal_distance,
-		vertical_distance,
-		cos(camera_yaw) * horizontal_distance
-	)
+    hero_model = packed_scene.instantiate() as Node3D
 
-	game_camera.global_position = target + offset
-	game_camera.look_at(target, Vector3.UP)
+    if hero_model == null:
+        push_error("Family Quest: GLB root is not a Node3D.")
+        _create_fallback_model()
+        return
 
+    hero_model.name = "HeroModel"
+    hero_model.position = hero_model_offset
+    hero_model.scale = Vector3.ONE * hero_model_scale
 
-# =========================================================
-# MOVEMENT
-# =========================================================
+    add_child(hero_model)
 
-func _physics_process(delta: float) -> void:
-	if is_dead:
-		velocity.x = 0.0
-		velocity.z = 0.0
+    skeleton = _find_skeleton(hero_model)
 
-		if not is_on_floor():
-			velocity.y -= gravity * delta
-		else:
-			velocity.y = 0.0
-
-		move_and_slide()
-		return
-
-	if attack_timer > 0.0:
-		attack_timer -= delta
-
-		if attack_timer <= 0.0:
-			is_attacking = false
-			_update_movement_animation()
-
-	var input_direction := Input.get_vector(
-		"ui_left",
-		"ui_right",
-		"ui_up",
-		"ui_down"
-	)
-
-	if joystick_active:
-		input_direction = joystick_vector
-
-	var camera_forward := Vector3(
-		-sin(camera_yaw),
-		0.0,
-		-cos(camera_yaw)
-	).normalized()
-
-	var camera_right := Vector3(
-		cos(camera_yaw),
-		0.0,
-		-sin(camera_yaw)
-	).normalized()
-
-	var move_direction := (
-		camera_right * input_direction.x
-		+ camera_forward * -input_direction.y
-	)
-
-	if move_direction.length() > 1.0:
-		move_direction = move_direction.normalized()
-
-	var current_speed := move_speed
-
-	if Input.is_action_pressed("sprint"):
-		current_speed = run_speed
-
-	if move_direction.length() > 0.05:
-		velocity.x = move_direction.x * current_speed
-		velocity.z = move_direction.z * current_speed
-
-		if hero_visual != null and not is_attacking:
-			hero_visual.rotation.y = atan2(
-				move_direction.x,
-				move_direction.z
-			)
-	else:
-		velocity.x = move_toward(velocity.x, 0.0, move_speed * 5.0 * delta)
-		velocity.z = move_toward(velocity.z, 0.0, move_speed * 5.0 * delta)
-
-	if not is_on_floor():
-		velocity.y -= gravity * delta
-	else:
-		velocity.y = 0.0
-
-	move_and_slide()
-
-	_update_movement_animation()
+    print("Family Quest: Hero model loaded.")
+    print("Family Quest: Skeleton found: ", skeleton != null)
 
 
-func _process(_delta: float) -> void:
-	_update_camera()
+func _find_skeleton(root: Node) -> Skeleton3D:
+    if root is Skeleton3D:
+        return root as Skeleton3D
+
+    for child in root.get_children():
+        var result := _find_skeleton(child)
+        if result != null:
+            return result
+
+    return null
 
 
-# =========================================================
+func _create_fallback_model() -> void:
+    var mesh_instance := MeshInstance3D.new()
+    var capsule := CapsuleMesh.new()
+
+    capsule.radius = 0.35
+    capsule.height = 1.8
+
+    mesh_instance.mesh = capsule
+    mesh_instance.position.y = 0.9
+    add_child(mesh_instance)
+
+
+# ==========================================
 # ANIMATION DISCOVERY
-# =========================================================
+# ==========================================
 
 func _find_hero_animations() -> void:
-	if hero_visual == null:
-		return
+    animation_player = null
+    walk_animation = &""
+    idle_animation = &""
+    attack_animation = &""
+    death_animation = &""
 
-	var players := hero_visual.find_children(
-		"*",
-		"AnimationPlayer",
-		true,
-		false
-	)
+    if hero_model == null:
+        return
 
-	if players.size() > 0:
-		animation_player = players[0] as AnimationPlayer
+    var players := hero_model.find_children(
+        "*", "AnimationPlayer", true, false
+    )
 
-	if animation_player == null:
-		return
+    for item in players:
+        var candidate := item as AnimationPlayer
+        if candidate == null:
+            continue
 
-	if not animation_player.animation_finished.is_connected(
-		_on_animation_finished
-	):
-		animation_player.animation_finished.connect(
-			_on_animation_finished
-		)
+        animation_player = candidate
 
-	var animation_names := animation_player.get_animation_list()
+        for animation_name in candidate.get_animation_list():
+            var lower_name := String(animation_name).to_lower()
 
-	print("Hero animations found: ", animation_names)
+            if lower_name.contains("walk"):
+                walk_animation = StringName(animation_name)
+            elif lower_name.contains("idle"):
+                idle_animation = StringName(animation_name)
+            elif lower_name.contains("attack"):
+                attack_animation = StringName(animation_name)
+            elif lower_name.contains("death"):
+                death_animation = StringName(animation_name)
 
-	for animation_name in animation_names:
-		var anim_lower := String(animation_name).to_lower()
+        if walk_animation != &"":
+            break
 
-		if idle_animation == &"":
-			if anim_lower.contains("idle") \
-			or anim_lower.contains("stand"):
-				idle_animation = animation_name
+    if animation_player == null:
+        push_warning("Hero GLB has no AnimationPlayer.")
+        return
 
-		if walk_animation == &"":
-			if anim_lower.contains("walk") \
-			or anim_lower.contains("walking"):
-				walk_animation = animation_name
+    if walk_animation == &"":
+        push_warning("No Walk animation found in the hero GLB.")
+    else:
+        print("Family Quest: Walk animation found: ", walk_animation)
 
-		if run_animation == &"":
-			if anim_lower.contains("run") \
-			or anim_lower.contains("running") \
-			or anim_lower.contains("sprint"):
-				run_animation = animation_name
+    if idle_animation != &"":
+        print("Family Quest: Idle animation found: ", idle_animation)
 
-		if attack_animation == &"":
-			if anim_lower.contains("attack") \
-			or anim_lower.contains("slash") \
-			or anim_lower.contains("swing"):
-				attack_animation = animation_name
-
-		if death_animation == &"":
-			if anim_lower.contains("death") \
-			or anim_lower.contains("die") \
-			or anim_lower.contains("defeat"):
-				death_animation = animation_name
+    if attack_animation != &"":
+        print("Family Quest: Attack animation found: ", attack_animation)
 
 
-func _play_animation(animation_name: StringName) -> void:
-	if animation_player == null:
-		return
+func _play_idle_or_rest_pose() -> void:
+    if animation_player == null:
+        return
 
-	if animation_name == &"":
-		return
-
-	if not animation_player.has_animation(animation_name):
-		return
-
-	if animation_player.current_animation == animation_name \
-	and animation_player.is_playing():
-		return
-
-	animation_player.play(animation_name)
+    if idle_animation != &"":
+        animation_player.play(idle_animation)
+    elif walk_animation != &"":
+        # No idle clip exists in this GLB.
+        # Return the Walk animation to its first frame.
+        animation_player.play(walk_animation)
+        animation_player.seek(0.0, true)
+        animation_player.pause()
 
 
-# =========================================================
-# MOVEMENT ANIMATIONS
-# =========================================================
+func _play_walk() -> void:
+    if animation_player == null or walk_animation == &"":
+        return
 
-func _update_movement_animation() -> void:
-	if is_dead or is_attacking:
-		return
+    if not animation_player.is_playing() \
+    or animation_player.current_animation != walk_animation:
+        animation_player.play(walk_animation)
 
-	if animation_player == null:
-		return
-
-	var horizontal_speed := Vector2(
-		velocity.x,
-		velocity.z
-	).length()
-
-	if horizontal_speed < 0.2:
-		if idle_animation != &"":
-			_play_animation(idle_animation)
-	elif horizontal_speed > move_speed * 1.1:
-		if run_animation != &"":
-			_play_animation(run_animation)
-		elif walk_animation != &"":
-			_play_animation(walk_animation)
-	else:
-		if walk_animation != &"":
-			_play_animation(walk_animation)
-		elif run_animation != &"":
-			_play_animation(run_animation)
+    animation_player.speed_scale = 1.0
 
 
-# =========================================================
-# ATTACK
-# Call this from main.gd when the player attacks.
-# =========================================================
+func _stop_walking() -> void:
+    if animation_player == null:
+        return
+
+    if idle_animation != &"":
+        animation_player.play(idle_animation)
+    elif walk_animation != &"":
+        animation_player.play(walk_animation)
+        animation_player.seek(0.0, true)
+        animation_player.pause()
+
 
 func play_attack_animation() -> void:
-	if is_dead or is_attacking:
-		return
+    if is_dead or animation_player == null:
+        return
 
-	is_attacking = true
-	attack_timer = attack_duration
-
-	if animation_player != null and attack_animation != &"":
-		if animation_player.has_animation(attack_animation):
-			var animation := animation_player.get_animation(
-				attack_animation
-			)
-
-			if animation != null and animation.length > 0.0:
-				attack_timer = animation.length
-
-			_play_animation(attack_animation)
-
-
-func _on_animation_finished(_animation_name: StringName) -> void:
-	if is_dead:
-		return
-
-	if is_attacking:
-		is_attacking = false
-		attack_timer = 0.0
-		_update_movement_animation()
-
-
-# =========================================================
-# DAMAGE AND DEATH
-# =========================================================
-
-func take_damage(amount: int) -> void:
-	if is_dead or amount <= 0:
-		return
-
-	hp = clampi(hp - amount, 0, max_hp)
-
-	if hp <= 0:
-		play_death_animation()
-
-
-func heal(amount: int) -> void:
-	if is_dead or amount <= 0:
-		return
-
-	hp = clampi(hp + amount, 0, max_hp)
+    if attack_animation != &"":
+        animation_player.play(attack_animation)
 
 
 func play_death_animation() -> void:
-	if is_dead:
-		return
+    if animation_player == null:
+        return
 
-	is_dead = true
-	is_attacking = false
-	attack_timer = 0.0
-
-	velocity = Vector3.ZERO
-
-	if animation_player != null and death_animation != &"":
-		if animation_player.has_animation(death_animation):
-			_play_animation(death_animation)
-
-	print("Hero defeated. HP: ", hp)
+    if death_animation != &"":
+        animation_player.play(death_animation)
 
 
-# =========================================================
-# ANDROID TOUCH INPUT
-# =========================================================
+# ==========================================
+# CAMERA
+# ==========================================
+
+func _create_camera() -> void:
+    camera_pivot = Node3D.new()
+    camera_pivot.name = "CameraPivot"
+    camera_pivot.position = Vector3(0.0, camera_height, 0.0)
+    add_child(camera_pivot)
+
+    game_camera = Camera3D.new()
+    game_camera.name = "PlayerCamera"
+    game_camera.position = Vector3(0.0, 0.0, camera_distance)
+    game_camera.current = true
+    camera_pivot.add_child(game_camera)
+
+    camera_yaw = rotation.y
+    _update_camera_rotation()
+
+
+func _update_camera_rotation() -> void:
+    if camera_pivot == null:
+        return
+
+    camera_pitch = clampf(camera_pitch, -0.65, 0.25)
+
+    camera_pivot.rotation = Vector3(
+        camera_pitch,
+        camera_yaw,
+        0.0
+    )
+
+
+# ==========================================
+# MOVEMENT
+# ==========================================
+
+func _physics_process(delta: float) -> void:
+    if is_dead:
+        velocity.x = 0.0
+        velocity.z = 0.0
+
+        if not is_on_floor():
+            velocity.y -= gravity * delta
+
+        move_and_slide()
+        return
+
+    var move_input := _get_movement_input()
+    var moving := move_input.length() > 0.12
+
+    if not is_on_floor():
+        velocity.y -= gravity * delta
+    elif velocity.y < 0.0:
+        velocity.y = 0.0
+
+    if moving:
+        var forward := -global_basis.z
+        var right := global_basis.x
+
+        # Camera-relative movement.
+        if camera_pivot != null:
+            forward = -camera_pivot.global_basis.z
+            right = camera_pivot.global_basis.x
+
+        forward.y = 0.0
+        right.y = 0.0
+
+        forward = forward.normalized()
+        right = right.normalized()
+
+        var direction := (
+            right * move_input.x
+            + forward * -move_input.y
+        ).normalized()
+
+        var current_speed := move_speed
+
+        if Input.is_key_pressed(KEY_SHIFT):
+            current_speed = run_speed
+
+        velocity.x = direction.x * current_speed
+        velocity.z = direction.z * current_speed
+
+        # Face the direction of movement.
+        var target_yaw := atan2(-direction.x, -direction.z)
+
+        rotation.y = lerp_angle(
+            rotation.y,
+            target_yaw,
+            minf(turn_speed * delta, 1.0)
+        )
+
+        _play_walk()
+    else:
+        velocity.x = move_toward(
+            velocity.x, 0.0, move_speed * 8.0 * delta
+        )
+        velocity.z = move_toward(
+            velocity.z, 0.0, move_speed * 8.0 * delta
+        )
+
+        if previous_movement:
+            _stop_walking()
+
+    previous_movement = moving
+    move_and_slide()
+
+
+func _get_movement_input() -> Vector2:
+    var keyboard_input := Input.get_vector(
+        "move_left",
+        "move_right",
+        "move_forward",
+        "move_back"
+    )
+
+    if keyboard_input.length() > 0.1:
+        return keyboard_input
+
+    if mobile_move_input.length() > 0.1:
+        return mobile_move_input
+
+    return Vector2.ZERO
+
+
+# ==========================================
+# ANDROID TOUCH CONTROLS
+# ==========================================
+
+func set_virtual_joystick_input(direction: Vector2) -> void:
+    mobile_move_input = direction.limit_length(1.0)
+
+
+func set_camera_touch_delta(delta: Vector2) -> void:
+    camera_yaw -= delta.x * camera_sensitivity
+    camera_pitch -= delta.y * camera_sensitivity
+    _update_camera_rotation()
+
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch:
-		var touch := event as InputEventScreenTouch
+    if event is InputEventScreenTouch:
+        var touch := event as InputEventScreenTouch
+        var screen_size := get_viewport().get_visible_rect().size
 
-		if touch.pressed:
-			if touch.position.x < get_viewport().get_visible_rect().size.x * 0.45:
-				joystick_active = true
-				joystick_pointer = touch.index
-				joystick_origin = touch.position
-				joystick_vector = Vector2.ZERO
-				_update_joystick_visual()
-			else:
-				camera_pointer = touch.index
-				camera_last_position = touch.position
-		else:
-			if touch.index == joystick_pointer:
-				joystick_active = false
-				joystick_pointer = -1
-				joystick_vector = Vector2.ZERO
-				_update_joystick_visual()
+        if touch.pressed:
+            if joystick_finger == -1 \
+            and touch.position.x < screen_size.x * 0.35 \
+            and touch.position.y > screen_size.y * 0.55:
+                joystick_finger = touch.index
+                joystick_origin = touch.position
+                joystick_position = touch.position
+                mobile_move_input = Vector2.ZERO
 
-			if touch.index == camera_pointer:
-				camera_pointer = -1
+            elif camera_finger == -1 \
+            and touch.position.x > screen_size.x * 0.35:
+                camera_finger = touch.index
 
-	elif event is InputEventScreenDrag:
-		var drag := event as InputEventScreenDrag
+        else:
+            if touch.index == joystick_finger:
+                joystick_finger = -1
+                mobile_move_input = Vector2.ZERO
 
-		if drag.index == joystick_pointer:
-			var offset := drag.position - joystick_origin
-			var radius := 65.0
+            if touch.index == camera_finger:
+                camera_finger = -1
 
-			joystick_vector = (offset / radius).limit_length(1.0)
-			_update_joystick_visual()
+    elif event is InputEventScreenDrag:
+        var drag := event as InputEventScreenDrag
 
-		elif drag.index == camera_pointer:
-			var delta_position := drag.position - camera_last_position
+        if drag.index == joystick_finger:
+            var offset := drag.position - joystick_origin
+            var limited := offset.limit_length(joystick_radius)
 
-			camera_yaw -= delta_position.x * camera_sensitivity
-			camera_pitch -= delta_position.y * camera_sensitivity
+            joystick_position = joystick_origin + limited
 
-			camera_pitch = clampf(camera_pitch, -0.8, 0.25)
-			camera_last_position = drag.position
+            mobile_move_input = Vector2(
+                limited.x / joystick_radius,
+                limited.y / joystick_radius
+            ).limit_length(1.0)
 
-
-# =========================================================
-# ON-SCREEN JOYSTICK VISUAL
-# =========================================================
-
-func _create_touch_controls() -> void:
-	var layer := CanvasLayer.new()
-	layer.name = "TouchControls"
-	add_child(layer)
-
-	var ui := Control.new()
-	ui.name = "JoystickUI"
-	ui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(ui)
-
-	joystick_base = Control.new()
-	joystick_base.name = "JoystickBase"
-	joystick_base.custom_minimum_size = Vector2(130, 130)
-	joystick_base.position = Vector2(35, 0)
-	joystick_base.anchor_top = 1.0
-	joystick_base.anchor_bottom = 1.0
-	joystick_base.offset_top = -165
-	joystick_base.offset_bottom = -35
-	joystick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ui.add_child(joystick_base)
-
-	var base_circle := ColorRect.new()
-	base_circle.name = "BaseCircle"
-	base_circle.size = Vector2(130, 130)
-	base_circle.color = Color(0.1, 0.1, 0.1, 0.35)
-	base_circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	joystick_base.add_child(base_circle)
-
-	joystick_knob = Control.new()
-	joystick_knob.name = "JoystickKnob"
-	joystick_knob.position = Vector2(40, 40)
-	joystick_knob.custom_minimum_size = Vector2(50, 50)
-	joystick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	joystick_base.add_child(joystick_knob)
-
-	var knob_circle := ColorRect.new()
-	knob_circle.name = "KnobCircle"
-	knob_circle.size = Vector2(50, 50)
-	knob_circle.color = Color(0.8, 0.8, 0.8, 0.65)
-	knob_circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	joystick_knob.add_child(knob_circle)
+        elif drag.index == camera_finger and camera_drag_enabled:
+            set_camera_touch_delta(drag.relative)
 
 
-func _update_joystick_visual() -> void:
-	if joystick_knob == null:
-		return
+# ==========================================
+# HEALTH / DAMAGE / DEATH
+# ==========================================
 
-	var center := Vector2(40, 40)
-	var offset := joystick_vector * 35.0
+func take_damage(amount: int) -> void:
+    if is_dead or amount <= 0:
+        return
 
-	joystick_knob.position = center + offset
+    hp = maxi(hp - amount, 0)
+
+    if hp <= 0:
+        hp = 0
+        is_dead = true
+        velocity = Vector3.ZERO
+        mobile_move_input = Vector2.ZERO
+        play_death_animation()
+        print("Family Quest: Hero defeated.")
+    elif animation_player != null:
+        if animation_player.has_animation("Hit_Reaction"):
+            animation_player.play("Hit_Reaction")
+
+    _print_health()
+
+
+func heal(amount: int) -> void:
+    if is_dead or amount <= 0:
+        return
+
+    hp = mini(hp + amount, max_hp)
+    _print_health()
+
+
+func revive() -> void:
+    hp = max_hp
+    is_dead = false
+    velocity = Vector3.ZERO
+    mobile_move_input = Vector2.ZERO
+    previous_movement = false
+    _play_idle_or_rest_pose()
+    print("Family Quest: Hero revived.")
+
+
+func _print_health() -> void:
+    print("Hero HP: ", hp, "/", max_hp)
