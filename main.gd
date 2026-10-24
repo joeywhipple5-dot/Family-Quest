@@ -51,7 +51,9 @@ func _ready() -> void:
     _create_environment()
     _build_village()
     _build_hearthvale_expansion()
+    _build_village_details()
     _build_quest_objects()
+    _build_town_npcs()
 
     # Create the player using the selected hero.
     player = CharacterBody3D.new()
@@ -516,6 +518,155 @@ func _build_tree(p: Vector3) -> void:
 
 
 # --------------------------------------------------
+# VILLAGE OVERHAUL DETAILS
+# --------------------------------------------------
+
+func _build_village_details() -> void:
+    # More readable paving stones along the main routes.
+    for i in range(9):
+        var z := -15.0 + float(i) * 4.0
+        _add_box(
+            "RoadStone_%02d" % i,
+            Vector3(0, 0.055, z),
+            Vector3(2.4, 0.06, 0.65),
+            Color("#D4C5A4"),
+            false
+        )
+
+    # Warm lantern posts around the market and village square.
+    var lamp_positions := [
+        Vector3(-10, 0, -12), Vector3(10, 0, -12),
+        Vector3(-12, 0, -23), Vector3(12, 0, -23),
+        Vector3(-4, 0, -34), Vector3(4, 0, -34),
+        Vector3(-5, 0, 5), Vector3(5, 0, 5)
+    ]
+    for i in range(lamp_positions.size()):
+        _build_lamp(lamp_positions[i], i)
+
+    # Seating and small village props.
+    _build_bench(Vector3(-4.5, 0, -8), 0.0)
+    _build_bench(Vector3(4.5, 0, -8), 180.0)
+    _build_bench(Vector3(-11.5, 0, -18), 90.0)
+    _build_bench(Vector3(11.5, 0, -18), -90.0)
+
+    var barrel_positions := [
+        Vector3(-11, 0, -4), Vector3(-5, 0, -3),
+        Vector3(10, 0, -5), Vector3(12, 0, -21),
+        Vector3(-12, 0, -25), Vector3(-15, 0, -31),
+        Vector3(18, 0, -35), Vector3(-18, 0, -35)
+    ]
+    for i in range(barrel_positions.size()):
+        _build_barrel(barrel_positions[i], i)
+
+    # Planters and flower patches add color without expensive assets.
+    var flower_positions := [
+        Vector3(-5.5, 0, -11), Vector3(5.5, 0, -11),
+        Vector3(-11, 0, -10), Vector3(11, 0, -10),
+        Vector3(-12, 0, -29), Vector3(12, 0, -29),
+        Vector3(-18, 0, -19), Vector3(18, 0, -19)
+    ]
+    for i in range(flower_positions.size()):
+        _build_flower_patch(flower_positions[i], i)
+
+    # Signs make the main village locations easier to identify.
+    _build_sign(Vector3(-8, 0, -1.8), "BLACKSMITH", Color("#B97B42"))
+    _build_sign(Vector3(8, 0, -1.8), "ARMOR", Color("#6688A6"))
+    _build_sign(Vector3(0, 0, 8.2), "WHISPERING WOODS", Color("#8D6A3D"))
+    _build_sign(Vector3(0, 0, -40), "CASTLE DISTRICT", Color("#7D8797"))
+
+
+func _build_lamp(p: Vector3, index: int) -> void:
+    _add_box("LampPost_%d" % index, p + Vector3(0, 1.5, 0),
+        Vector3(0.18, 3.0, 0.18), Color("#49382B"), false)
+    _add_box("LampArm_%d" % index, p + Vector3(0.28, 2.75, 0),
+        Vector3(0.7, 0.12, 0.12), Color("#49382B"), false)
+    var glow := MeshInstance3D.new()
+    glow.name = "LanternGlow_%d" % index
+    var sphere := SphereMesh.new()
+    sphere.radius = 0.22
+    sphere.height = 0.44
+    glow.mesh = sphere
+    glow.position = p + Vector3(0.52, 2.55, 0)
+    var mat := StandardMaterial3D.new()
+    mat.albedo_color = Color("#FFD77A")
+    mat.emission_enabled = true
+    mat.emission = Color("#FFB94A")
+    mat.emission_energy_multiplier = 1.2
+    glow.material_override = mat
+    add_child(glow)
+
+
+func _build_bench(p: Vector3, turn_degrees: float) -> void:
+    var bench := Node3D.new()
+    bench.name = "VillageBench"
+    bench.position = p
+    bench.rotation_degrees.y = turn_degrees
+    add_child(bench)
+    _add_local_box(bench, "BenchSeat", Vector3(0, 0.55, 0),
+        Vector3(1.8, 0.16, 0.55), Color("#76502E"))
+    _add_local_box(bench, "BenchBack", Vector3(0, 0.95, -0.22),
+        Vector3(1.8, 0.65, 0.12), Color("#8B6037"))
+    for x in [-0.65, 0.65]:
+        _add_local_box(bench, "BenchLeg", Vector3(x, 0.27, 0),
+            Vector3(0.12, 0.55, 0.4), Color("#49382B"))
+
+
+func _build_barrel(p: Vector3, index: int) -> void:
+    var barrel := _add_box("VillageBarrel_%d" % index,
+        p + Vector3(0, 0.48, 0), Vector3(0.8, 0.96, 0.8),
+        Color("#81532E"), false)
+    _add_box("BarrelBandA_%d" % index, p + Vector3(0, 0.25, 0),
+        Vector3(0.84, 0.08, 0.84), Color("#4C5054"), false)
+    _add_box("BarrelBandB_%d" % index, p + Vector3(0, 0.72, 0),
+        Vector3(0.84, 0.08, 0.84), Color("#4C5054"), false)
+
+
+func _build_flower_patch(p: Vector3, index: int) -> void:
+    _add_box("FlowerBed_%d" % index, p + Vector3(0, 0.12, 0),
+        Vector3(1.8, 0.24, 1.1), Color("#59432E"), false)
+    var colors := [Color("#E7B7D1"), Color("#F3D36C"), Color("#A9C8F0")]
+    for i in range(5):
+        var flower := MeshInstance3D.new()
+        var mesh := SphereMesh.new()
+        mesh.radius = 0.12
+        mesh.height = 0.24
+        flower.mesh = mesh
+        flower.position = p + Vector3(-0.6 + float(i) * 0.3, 0.38, 0.0 if i % 2 == 0 else 0.25)
+        var mat := StandardMaterial3D.new()
+        mat.albedo_color = colors[(i + index) % colors.size()]
+        flower.material_override = mat
+        add_child(flower)
+
+
+func _build_sign(p: Vector3, text_value: String, sign_color: Color) -> void:
+    _add_box("SignPost_" + text_value, p + Vector3(0, 1.0, 0),
+        Vector3(0.16, 2.0, 0.16), Color("#593A24"), false)
+    _add_box("SignBoard_" + text_value, p + Vector3(0, 1.9, 0),
+        Vector3(2.4, 0.7, 0.18), sign_color, false)
+    var label := Label3D.new()
+    label.name = "SignLabel_" + text_value
+    label.text = text_value
+    label.position = p + Vector3(0, 1.9, 0.12)
+    label.pixel_size = 0.006
+    label.modulate = Color("#FFF4D7")
+    add_child(label)
+
+
+func _add_local_box(parent: Node3D, object_name: String, p: Vector3,
+        size_value: Vector3, color_value: Color) -> void:
+    var mesh_instance := MeshInstance3D.new()
+    mesh_instance.name = object_name
+    var mesh := BoxMesh.new()
+    mesh.size = size_value
+    mesh_instance.mesh = mesh
+    mesh_instance.position = p
+    var mat := StandardMaterial3D.new()
+    mat.albedo_color = color_value
+    mesh_instance.material_override = mat
+    parent.add_child(mesh_instance)
+
+
+# --------------------------------------------------
 # QUEST OBJECTS
 # --------------------------------------------------
 
@@ -574,6 +725,89 @@ func _build_quest_objects() -> void:
             Vector3(0, 0.8, 0),
             Color("#E6C16A")
         )
+
+
+func _build_town_npcs() -> void:
+    # NPC models are intentionally simple placeholders so their visuals can be
+    # replaced later without changing their interaction logic.
+    _make_town_npc("Blacksmith", Vector3(-8, 0, -2.4),
+        Color("#8D5638"), Color("#C28B57"),
+        "Blacksmith: Welcome, hero. Equipment upgrades will be available here soon.")
+    _make_town_npc("MarketMerchant", Vector3(6, 0, -19.2),
+        Color("#3E6B9A"), Color("#D6B27A"),
+        "Merchant: Potions, supplies, and useful gear will be sold here.")
+    _make_town_npc("WoodsGuard", Vector3(0, 0, 9.3),
+        Color("#4B6845"), Color("#C9B28B"),
+        "Guard: Stay alert beyond this gate. The Whispering Woods are dangerous.")
+    _make_town_npc("Innkeeper", Vector3(-17, 0, -26.2),
+        Color("#8B5C43"), Color("#D5B08A"),
+        "Innkeeper: Rest here after your adventures. Welcome to the Hearthvale Inn.")
+    _make_town_npc("Baker", Vector3(-15, 0, -16.2),
+        Color("#B77B43"), Color("#E1C49B"),
+        "Baker: Fresh bread for travelers! A proper shop is coming soon.")
+    _make_town_npc("Apothecary", Vector3(17, 0, -29.2),
+        Color("#76518A"), Color("#D2B6A0"),
+        "Apothecary: I will prepare potions and remedies for your journey.")
+    _make_town_npc("VillageResident", Vector3(11, 0, -8.5),
+        Color("#6D796A"), Color("#C58F68"),
+        "Villager: Hearthvale is growing safer thanks to brave adventurers like you.")
+
+
+func _make_town_npc(npc_name: String, p: Vector3, tunic_color: Color,
+        skin_color: Color, dialogue: String) -> void:
+    var npc := Node3D.new()
+    npc.name = npc_name
+    npc.position = p
+    npc.set_meta("is_town_npc", true)
+    npc.set_meta("npc_dialogue", dialogue)
+    add_child(npc)
+
+    var body := MeshInstance3D.new()
+    body.name = "Body"
+    var body_mesh := CapsuleMesh.new()
+    body_mesh.radius = 0.38
+    body_mesh.height = 1.35
+    body.mesh = body_mesh
+    body.position.y = 0.82
+    var body_mat := StandardMaterial3D.new()
+    body_mat.albedo_color = tunic_color
+    body.material_override = body_mat
+    npc.add_child(body)
+
+    var head := MeshInstance3D.new()
+    head.name = "Head"
+    var head_mesh := SphereMesh.new()
+    head_mesh.radius = 0.27
+    head_mesh.height = 0.54
+    head.mesh = head_mesh
+    head.position.y = 1.68
+    var head_mat := StandardMaterial3D.new()
+    head_mat.albedo_color = skin_color
+    head.material_override = head_mat
+    npc.add_child(head)
+
+    # A simple colored cap/hood helps distinguish town roles before final art.
+    var hood := MeshInstance3D.new()
+    hood.name = "Hood"
+    var hood_mesh := SphereMesh.new()
+    hood_mesh.radius = 0.29
+    hood_mesh.height = 0.24
+    hood.mesh = hood_mesh
+    hood.position.y = 1.88
+    var hood_mat := StandardMaterial3D.new()
+    hood_mat.albedo_color = tunic_color.darkened(0.25)
+    hood.material_override = hood_mat
+    npc.add_child(hood)
+
+    var label := Label3D.new()
+    label.name = "NameLabel"
+    label.text = npc_name.replace("Market", " ").replace("Village", " ")
+    label.position.y = 2.25
+    label.pixel_size = 0.009
+    label.modulate = Color("#FFF0C9")
+    npc.add_child(label)
+
+    _add_quest_marker(npc, "…", Vector3(0, 2.55, 0), Color("#9FE7E5"))
 
 
 func _add_quest_marker(
@@ -1021,6 +1255,19 @@ func _interact() -> void:
             _message("Hearthvale is safer because of you, hero!")
 
         _refresh()
+        return
+
+    # Talk to the nearest named town NPC.
+    var nearest_npc: Node3D = null
+    var nearest_npc_distance := 3.8
+    for child in get_children():
+        if child is Node3D and child.has_meta("is_town_npc"):
+            var npc_distance := _flat_distance(p, child.global_position)
+            if npc_distance <= nearest_npc_distance:
+                nearest_npc_distance = npc_distance
+                nearest_npc = child
+    if nearest_npc != null:
+        _message(str(nearest_npc.get_meta("npc_dialogue")))
         return
 
     # Other town interactions.
