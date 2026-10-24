@@ -50,6 +50,7 @@ func _ready() -> void:
 
     _create_environment()
     _build_village()
+    print("HEARTHVALE DEBUG: village build started")
     _build_hearthvale_expansion()
     _build_quest_objects()
 
