@@ -29,20 +29,19 @@ var joystick_knob: Control
 
 
 func _ready() -> void:
-    # Temporary visible hero.
-    var body_mesh := MeshInstance3D.new()
-    body_mesh.name = "TemporaryHeroVisual"
+    
+    # Load the Warrior model from the artwork folder.
+    var hero_path := "res://artwork/FamilyQuest_Warrior_Hero_Rigged-2.glb"
+    var hero_scene := load(hero_path) as PackedScene
 
-    var capsule_mesh := CapsuleMesh.new()
-    capsule_mesh.radius = 0.45
-    capsule_mesh.height = 1.8
-    body_mesh.mesh = capsule_mesh
-    body_mesh.position.y = 0.9
+    if hero_scene != null:
+        var hero_visual := hero_scene.instantiate()
+        hero_visual.name = "HeroVisual"
+        add_child(hero_visual)
+        hero_visual.position = Vector3.ZERO
+    else:
+        push_error("Could not load Warrior model: " + hero_path)
 
-    var body_material := StandardMaterial3D.new()
-    body_material.albedo_color = Color(0.12, 0.36, 0.95)
-    body_mesh.material_override = body_material
-    add_child(body_mesh)
 
     # Hero collision.
     var collision := CollisionShape3D.new()
