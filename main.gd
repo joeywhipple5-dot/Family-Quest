@@ -375,20 +375,112 @@ func _build_hearthvale_expansion() -> void:
         _build_tree(Vector3(29, 0, z))
 
 
-func _build_house(p: Vector3, house_color: Color, house_name: String) -> void:
-    _add_box(house_name + "Floor", p + Vector3(0, 0.08, 0), Vector3(5.8, 0.16, 5.8), Color("#9B8060"), true)
-    _add_box(house_name + "LeftWall", p + Vector3(-2.9, 2.2, 0), Vector3(0.2, 4.4, 6.0), house_color, true)
-    _add_box(house_name + "RightWall", p + Vector3(2.9, 2.2, 0), Vector3(0.2, 4.4, 6.0), house_color, true)
-    _add_box(house_name + "BackWall", p + Vector3(0, 2.2, -2.9), Vector3(6.0, 4.4, 0.2), house_color, true)
-    _add_box(house_name + "FrontLeftWall", p + Vector3(-2.0, 2.2, 2.9), Vector3(2.0, 4.4, 0.2), house_color, true)
-    _add_box(house_name + "FrontRightWall", p + Vector3(2.0, 2.2, 2.9), Vector3(2.0, 4.4, 0.2), house_color, true)
-    _add_box(house_name + "DoorHeader", p + Vector3(0, 3.35, 2.9), Vector3(2.0, 2.1, 0.2), house_color, true)
 
-    _add_box("Roof_" + house_name, p + Vector3(0, 4.65, 0), Vector3(6.8, 0.6, 6.8), Color("#49352D"), false)
-    _add_box("Door_" + house_name, p + Vector3(0.65, 1.05, 2.78), Vector3(0.65, 2.1, 0.12), Color("#4A2B1A"), false)
-    _add_box("WindowL_" + house_name, p + Vector3(-2.0, 2.3, 3.02), Vector3(0.75, 0.9, 0.1), Color("#9ED5E0"), false)
-    _add_box("WindowR_" + house_name, p + Vector3(2.0, 2.3, 3.02), Vector3(0.75, 0.9, 0.1), Color("#9ED5E0"), false)
-    _add_box("Counter_" + house_name, p + Vector3(0, 0.65, -1.25), Vector3(2.0, 0.9, 0.7), Color("#654329"), true)
+
+func _build_house(p: Vector3, house_color: Color, house_name: String) -> void:
+    # Floor
+    _add_box(
+        house_name + "Floor",
+        p + Vector3(0, 0.08, 0),
+        Vector3(5.8, 0.16, 5.8),
+        Color("#9B8060"),
+        true
+    )
+
+    # Side walls and back wall
+    _add_box(
+        house_name + "LeftWall",
+        p + Vector3(-2.9, 2.2, 0),
+        Vector3(0.2, 4.4, 6.0),
+        house_color,
+        true
+    )
+
+    _add_box(
+        house_name + "RightWall",
+        p + Vector3(2.9, 2.2, 0),
+        Vector3(0.2, 4.4, 6.0),
+        house_color,
+        true
+    )
+
+    _add_box(
+        house_name + "BackWall",
+        p + Vector3(0, 2.2, -2.9),
+        Vector3(6.0, 4.4, 0.2),
+        house_color,
+        true
+    )
+
+    # Front wall with a wide, open doorway
+    _add_box(
+        house_name + "FrontLeftWall",
+        p + Vector3(-2.15, 2.2, 2.9),
+        Vector3(1.5, 4.4, 0.2),
+        house_color,
+        true
+    )
+
+    _add_box(
+        house_name + "FrontRightWall",
+        p + Vector3(2.15, 2.2, 2.9),
+        Vector3(1.5, 4.4, 0.2),
+        house_color,
+        true
+    )
+
+    # Header above the entrance; opening below remains clear
+    _add_box(
+        house_name + "DoorHeader",
+        p + Vector3(0, 3.8, 2.9),
+        Vector3(2.8, 1.2, 0.2),
+        house_color,
+        true
+    )
+
+    # Roof
+    _add_box(
+        "Roof_" + house_name,
+        p + Vector3(0, 4.65, 0),
+        Vector3(6.8, 0.6, 6.8),
+        Color("#49352D"),
+        false
+    )
+
+    # Door visual: no collision, positioned to one side
+    _add_box(
+        "Door_" + house_name,
+        p + Vector3(-0.75, 1.05, 2.78),
+        Vector3(0.08, 2.1, 0.9),
+        Color("#4A2B1A"),
+        false
+    )
+
+    # Front windows
+    _add_box(
+        "WindowL_" + house_name,
+        p + Vector3(-2.0, 2.3, 3.02),
+        Vector3(0.65, 0.9, 0.1),
+        Color("#9ED5E0"),
+        false
+    )
+
+    _add_box(
+        "WindowR_" + house_name,
+        p + Vector3(2.0, 2.3, 3.02),
+        Vector3(0.65, 0.9, 0.1),
+        Color("#9ED5E0"),
+        false
+    )
+
+    # Counter inside the house
+    _add_box(
+        "Counter_" + house_name,
+        p + Vector3(0, 0.65, -1.25),
+        Vector3(2.0, 0.9, 0.7),
+        Color("#654329"),
+        true
+    )
 
 
 func _build_tower(p: Vector3, tower_height: float) -> void:
