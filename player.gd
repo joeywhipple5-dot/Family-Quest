@@ -23,7 +23,7 @@ var hero_gender: String = "male"
 @export var hero_model_path: String = "res://artwork/FamilyQuest_Warrior_Hero_Rigged-2.glb"
 
 # Adjust these if the imported model is too large or too small.
-@export var hero_model_scale: float = 0.3
+@export var hero_model_scale: float = 1.0
 @export var hero_model_offset: Vector3 = Vector3.ZERO
 
 var game_camera: Camera3D
