@@ -40,16 +40,24 @@ func _build_ui() -> void:
     var back := Button.new(); back.text = "BACK TO MENU"; back.size_flags_horizontal = Control.SIZE_EXPAND_FILL; back.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")); bottom.add_child(back)
     var play := Button.new(); play.text = "BEGIN ADVENTURE"; play.size_flags_horizontal = Control.SIZE_EXPAND_FILL; play.pressed.connect(_begin_adventure); bottom.add_child(play)
 
+
 func _choose_class(value: String) -> void:
-    chosen_class = value; _refresh_preview()
+	if PlayerProfile.character_locked:
+		return
+	chosen_class = value
+	_refresh_preview()
+
+
 func _choose_gender(value: String) -> void:
-    chosen_gender = value; _refresh_preview()
-func _refresh_preview() -> void:
-    if is_instance_valid(builder):
-        for child in builder.get_children(): child.queue_free()
-        var character: Node3D = builder.build_character(chosen_class, chosen_gender)
-        builder.add_child(character)
-    if is_instance_valid(details): details.text = "%s  •  %s\n%s" % [chosen_gender.capitalize(), chosen_class, DESCRIPTIONS[chosen_class]]
+	if PlayerProfile.character_locked:
+		return
+	chosen_gender = value
+	_refresh_preview()
+
+
 func _begin_adventure() -> void:
-    PlayerProfile.set_selection(chosen_class, chosen_gender)
-    get_tree().change_scene_to_file("res://scenes/Main.tscn")
+	if not PlayerProfile.character_locked:
+		PlayerProfile.set_selection(chosen_class, chosen_gender)
+		PlayerProfile.lock_selection()
+
+	get_tree().change_scene_to_file("res://scenes/Main.tscn")
