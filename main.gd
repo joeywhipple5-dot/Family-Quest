@@ -12,6 +12,9 @@ var status_label: Label
 var economy_label: Label
 var quest_label: Label
 var message_label: Label
+var health_bar: ProgressBar
+var health_text: Label
+const MAX_HERO_HP := 100
 
 var hero_class := "Warrior"
 var hero_gender := "male"
@@ -838,7 +841,21 @@ func _make_hud() -> void:
     message_label = Label.new()
     message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     col.add_child(message_label)
+    # HERO HEALTH BAR
+    var health_row := HBoxContainer.new()
+    col.add_child(health_row)
 
+    health_text = Label.new()
+    health_text.text = "HP: 100 / 100"
+    health_row.add_child(health_text)
+
+    health_bar = ProgressBar.new()
+    health_bar.custom_minimum_size = Vector2(200, 22)
+    health_bar.min_value = 0
+    health_bar.max_value = MAX_HERO_HP
+    health_bar.value = MAX_HERO_HP
+    health_bar.show_percentage = false
+    health_row.add_child(health_bar)
     var interact_button := Button.new()
     interact_button.text = "INTERACT"
     interact_button.anchor_left = 1.0
