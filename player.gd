@@ -103,8 +103,6 @@ func _physics_process(delta: float) -> void:
         return
 
     var input_dir := _move_input.limit_length(1.0)
-
-    # Movement follows the direction the camera is facing.
     var camera_basis := Basis(Vector3.UP, _camera_yaw)
     var world_move := camera_basis * Vector3(input_dir.x, 0.0, input_dir.y)
     world_move.y = 0.0
@@ -133,8 +131,6 @@ func _physics_process(delta: float) -> void:
     _update_camera()
 
 
-# Use _input instead of _unhandled_input so GUI controls cannot
-# swallow the touch events before the player controller receives them.
 func _input(event: InputEvent) -> void:
     if event is InputEventScreenTouch:
         var touch := event as InputEventScreenTouch
@@ -147,7 +143,6 @@ func _input(event: InputEvent) -> void:
             else:
                 if _camera_touch_id == -1:
                     _camera_touch_id = touch.index
-
         else:
             if touch.index == _joystick_touch_id:
                 _joystick_touch_id = -1
@@ -167,8 +162,10 @@ func _input(event: InputEvent) -> void:
 
     elif event is InputEventMouseButton:
         var mouse_button := event as InputEventMouseButton
+
         if mouse_button.button_index == MOUSE_BUTTON_LEFT:
             var screen_size := get_viewport().get_visible_rect().size
+
             if mouse_button.pressed:
                 if mouse_button.position.x < screen_size.x * movement_screen_ratio:
                     if _joystick_touch_id == -1 and not is_dead:
@@ -180,11 +177,13 @@ func _input(event: InputEvent) -> void:
                     _joystick_touch_id = -1
                     _move_input = Vector2.ZERO
                     _reset_joystick_visual()
+
                 if _camera_touch_id == -2:
                     _camera_touch_id = -1
 
     elif event is InputEventMouseMotion:
         var mouse_motion := event as InputEventMouseMotion
+
         if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
             if _joystick_touch_id == -2:
                 _update_joystick_from_position(mouse_motion.position)
@@ -223,9 +222,8 @@ func _input(event: InputEvent) -> void:
 
 func _begin_joystick(touch_id: int, touch_position: Vector2, screen_size: Vector2) -> void:
     _joystick_touch_id = touch_id
-
-    # Put the joystick near the thumb, but keep its artwork onscreen.
     _joystick_origin = touch_position
+
     var margin := _joystick_visual_radius + 8.0
     _joystick_center = Vector2(
         clampf(touch_position.x, margin, maxf(margin, screen_size.x - margin)),
@@ -245,7 +243,6 @@ func _update_joystick_from_position(screen_position: Vector2) -> void:
     if _joystick_touch_id == -1:
         return
 
-    # Calculate movement from where the thumb first touched.
     var offset := (screen_position - _joystick_origin).limit_length(_joystick_radius)
     _move_input = Vector2(
         offset.x / _joystick_radius,
@@ -272,9 +269,10 @@ func _update_joystick_visual(screen_position: Vector2) -> void:
     _joystick_knob.position = knob_center - _joystick_knob.size * 0.5
 
 
+# FIX: Keep the analog stick visible after releasing your thumb.
 func _reset_joystick_visual() -> void:
     if _joystick_base != null:
-        _joystick_base.visible = false
+        _joystick_base.visible = true
 
     if _joystick_knob != null:
         _joystick_knob.position = Vector2(
@@ -537,8 +535,9 @@ func _create_mobile_controls() -> void:
     _joystick_base = Panel.new()
     _joystick_base.name = "JoystickBase"
     _joystick_base.size = Vector2.ONE * (_joystick_visual_radius * 2.0)
+    _joystick_base.position = Vector2(28.0, get_viewport().get_visible_rect().size.y - _joystick_visual_radius * 2.0 - 28.0)
     _joystick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    _joystick_base.visible = false
+    _joystick_base.visible = true
 
     var base_style := StyleBoxFlat.new()
     base_style.bg_color = Color(0.12, 0.18, 0.22, 0.58)
@@ -577,6 +576,7 @@ func _create_mobile_controls() -> void:
     _health_label.add_theme_font_size_override("font_size", 24)
     _health_label.add_theme_color_override("font_color", Color.WHITE)
     _hud_root.add_child(_health_label)
+
     _update_health_label()
 
 
