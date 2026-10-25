@@ -114,6 +114,8 @@ func _ready() -> void:
 
     player.position = Vector3(0, 2, 8)
 
+    _ensure_camera()
+
     _make_hud()
     _refresh()
 
@@ -1761,3 +1763,14 @@ func _message(text_message: String) -> void:
         message_label.text = text_message
 
     print(text_message)
+
+func _ensure_camera() -> void:
+    var camera := Camera3D.new()
+    camera.name = "GameCamera"
+    add_child(camera)
+
+    camera.position = Vector3(0, 10, 18)
+    camera.look_at(Vector3(0, 0, 0), Vector3.UP)
+    camera.current = true
+    camera.fov = 70.0
+    camera.far = 500.0
