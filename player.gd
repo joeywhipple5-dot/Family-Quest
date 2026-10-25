@@ -1,640 +1,223 @@
 
 extends CharacterBody3D
 
-signal health_changed(current_health: int, maximum_health: int)
-signal player_died
-signal player_revived
+# ============================================================
+# FAMILY QUEST - PLAYER
+# Godot 4.3 | Android | Landscape
+# ============================================================
 
-@export_group("Character")
-@export_file("*.glb", "*.tscn")
-var character_scene_path: String = "res://artwork/FamilyQuest_Warrior_Hero_Rigged-2.glb"
-@export var character_scale: float = 1.0
-@export_range(-180.0, 180.0, 1.0)
-var model_forward_offset_degrees: float = 180.0
-@export var model_local_position: Vector3 = Vector3.ZERO
+signal health_changed(current_hp: int, maximum_hp: int)
+signal player_died
+signal player_respawned
+signal attack_requested
+signal ability_requested(ability_name: String)
 
 @export_group("Movement")
-@export var move_speed: float = 4.5
-@export var acceleration: float = 14.0
-@export var deceleration: float = 18.0
-@export var rotation_speed: float = 10.0
-@export var gravity_strength: float = 22.0
-@export var jump_velocity: float = 5.0
-@export_range(0.0, 0.3, 0.01)
-var joystick_deadzone: float = 0.12
-
-@export_group("Camera")
-@export var camera_distance: float = 5.0
-@export var camera_height: float = 1.7
-@export var camera_sensitivity: float = 0.006
-@export_range(-70.0, -5.0, 1.0)
-var camera_min_pitch_degrees: float = -55.0
-@export_range(5.0, 70.0, 1.0)
-var camera_max_pitch_degrees: float = 25.0
+@export var move_speed: float = 5.0
+@export var acceleration: float = 18.0
+@export var deceleration: float = 22.0
+@export var rotation_speed: float = 12.0
+@export var gravity: float = 18.0
+@export var camera_relative_movement: bool = true
 
 @export_group("Health")
 @export var max_health: int = 100
-@export var respawn_health: int = 100
+@export var starting_health: int = 100
+@export var respawn_delay: float = 3.0
+
+@export_group("Touch Controls")
+@export var joystick_radius: float = 65.0
+@export var joystick_deadzone: float = 0.12
+@export var show_touch_controls: bool = true
+
+@export_group("Combat")
+@export var attack_cooldown: float = 0.5
+@export var ability_cooldown: float = 3.0
 
 var current_health: int = 100
-var hero_class: String = "Warrior"
-var hero_gender: String = "Male"
 var is_dead: bool = false
+var is_attacking: bool = false
 
 var _move_input: Vector2 = Vector2.ZERO
-var _joystick_input: Vector2 = Vector2.ZERO
-var _keyboard_input: Vector2 = Vector2.ZERO
+var _attack_timer: float = 0.0
+var _ability_timer: float = 0.0
 
-var _camera_yaw: float = 0.0
-# Positive pitch means the camera looks down toward the player.
-var _camera_pitch: float = deg_to_rad(12.0)
-
-var _camera_touch_id: int = -1
 var _joystick_touch_id: int = -1
-var _joystick_center: Vector2 = Vector2.ZERO
-var _joystick_radius: float = 65.0
+var _joystick_origin: Vector2 = Vector2.ZERO
+var _joystick_vector: Vector2 = Vector2.ZERO
 
-var _model_root: Node3D
-var _skeleton: Skeleton3D
-var _animation_player: AnimationPlayer
-var _walk_controller: Node
-var _walk_animation_name: StringName = &""
-var _idle_animation_name: StringName = &""
-var _death_animation_name: StringName = &""
-
-var _camera_pivot: Node3D
-var _camera: Camera3D
+var _joystick_base: Control
+var _joystick_knob: Control
+var _health_bar: ProgressBar
+var _health_text: Label
+var _attack_button: Button
+var _heal_button: Button
+var _ability_button: Button
+var _dodge_button: Button
 var _hud_layer: CanvasLayer
-var _joystick_base: Panel
-var _joystick_knob: Panel
-var _health_label: Label
 
+var _respawn_position: Vector3
+var _respawn_rotation: Vector3
 
 func _ready() -> void:
-    max_health = maxi(max_health, 1)
-    current_health = max_health
+    max_health = maxi(1, max_health)
+    current_health = clampi(starting_health, 0, max_health)
 
-    _create_collision()
-    _create_camera()
-    _create_mobile_controls()
-    _load_character()
-    _find_animations()
-    _update_camera()
+    _respawn_position = global_position
+    _respawn_rotation = rotation
 
+    add_to_group("player")
+
+    if show_touch_controls:
+        _create_mobile_hud()
+
+    _update_health_display()
     health_changed.emit(current_health, max_health)
 
 
 func _physics_process(delta: float) -> void:
-    _update_keyboard_input()
-
-    if _joystick_touch_id != -1:
-        _move_input = _joystick_input
-    else:
-        _move_input = _keyboard_input
-
     if is_dead:
-        _move_input = Vector2.ZERO
-        _joystick_input = Vector2.ZERO
-
-        var dead_horizontal := Vector3(velocity.x, 0.0, velocity.z)
-        dead_horizontal = dead_horizontal.move_toward(
-            Vector3.ZERO,
-            deceleration * delta
-        )
-        velocity.x = dead_horizontal.x
-        velocity.z = dead_horizontal.z
-
-        if not is_on_floor():
-            velocity.y -= gravity_strength * delta
-        else:
-            velocity.y = 0.0
-
-        move_and_slide()
-        _update_camera()
+        velocity = Vector3.ZERO
         return
 
-    # Remove tiny accidental joystick inputs and preserve analog strength.
-    var input_dir: Vector2 = _move_input.limit_length(1.0)
-    var input_strength: float = input_dir.length()
+    _attack_timer = maxf(0.0, _attack_timer - delta)
+    _ability_timer = maxf(0.0, _ability_timer - delta)
 
-    if input_strength < joystick_deadzone:
-        input_dir = Vector2.ZERO
-        input_strength = 0.0
+    _read_movement_input()
+    _move_player(delta)
+    _update_joystick_visual()
 
-    # Convert joystick directions into camera-relative world movement.
-    # At zero camera yaw, pushing up moves toward -Z.
-    var camera_basis := Basis(Vector3.UP, _camera_yaw)
-    var world_move: Vector3 = camera_basis * Vector3(
-        input_dir.x,
-        0.0,
-        input_dir.y
+
+# ============================================================
+# MOVEMENT
+# ============================================================
+
+func _read_movement_input() -> void:
+    var keyboard_input := Vector2.ZERO
+
+    keyboard_input.x = (
+        Input.get_action_strength("move_right")
+        - Input.get_action_strength("move_left")
     )
-    world_move.y = 0.0
+    keyboard_input.y = (
+        Input.get_action_strength("move_down")
+        - Input.get_action_strength("move_up")
+    )
 
-    if world_move.length_squared() > 0.0001:
-        world_move = world_move.normalized() * input_strength
+    if keyboard_input.length() > 1.0:
+        keyboard_input = keyboard_input.normalized()
+
+    if _joystick_vector.length() > joystick_deadzone:
+        _move_input = _joystick_vector
     else:
-        world_move = Vector3.ZERO
+        _move_input = keyboard_input
 
-    # Smooth acceleration and reliable stopping without excessive sliding.
-    var target_horizontal_velocity: Vector3 = world_move * move_speed
-    var current_horizontal_velocity := Vector3(
-        velocity.x,
-        0.0,
-        velocity.z
+
+func _move_player(delta: float) -> void:
+    var direction := Vector3.ZERO
+
+    if _move_input.length() > joystick_deadzone:
+        direction = Vector3(
+            _move_input.x,
+            0.0,
+            _move_input.y
+        )
+
+        if camera_relative_movement:
+            var camera := get_viewport().get_camera_3d()
+
+            if camera != null:
+                var forward := -camera.global_basis.z
+                var right := camera.global_basis.x
+
+                forward.y = 0.0
+                right.y = 0.0
+
+                forward = forward.normalized()
+                right = right.normalized()
+
+                direction = right * _move_input.x
+                direction += forward * -_move_input.y
+        else:
+            direction = Vector3(
+                _move_input.x,
+                0.0,
+                _move_input.y
+            )
+
+        direction.y = 0.0
+        direction = direction.normalized()
+
+    var target_velocity := direction * move_speed
+    var horizontal_velocity := Vector3(velocity.x, 0.0, velocity.z)
+
+    var rate := acceleration
+    if direction == Vector3.ZERO:
+        rate = deceleration
+
+    horizontal_velocity = horizontal_velocity.move_toward(
+        target_velocity,
+        rate * delta
     )
 
-    var movement_rate: float = acceleration
-    if input_strength <= 0.0:
-        movement_rate = deceleration
+    velocity.x = horizontal_velocity.x
+    velocity.z = horizontal_velocity.z
 
-    current_horizontal_velocity = current_horizontal_velocity.move_toward(
-        target_horizontal_velocity,
-        movement_rate * delta
-    )
-
-    velocity.x = current_horizontal_velocity.x
-    velocity.z = current_horizontal_velocity.z
-
-    # Gravity and ground handling.
     if not is_on_floor():
-        velocity.y -= gravity_strength * delta
+        velocity.y -= gravity * delta
     elif velocity.y < 0.0:
         velocity.y = 0.0
 
-    # Turn the hero smoothly toward the direction of travel.
-    if world_move.length_squared() > 0.01:
-        var target_yaw: float = atan2(
-            -world_move.x,
-            -world_move.z
-        )
-        target_yaw += deg_to_rad(model_forward_offset_degrees)
+    if direction.length_squared() > 0.001:
+        var target_angle := atan2(direction.x, direction.z)
 
         rotation.y = lerp_angle(
             rotation.y,
-            target_yaw,
-            1.0 - exp(-rotation_speed * delta)
+            target_angle,
+            minf(rotation_speed * delta, 1.0)
         )
 
     move_and_slide()
 
-    _update_character_animation(input_strength > 0.1)
-    _update_camera()
 
+# ============================================================
+# HEALTH AND DAMAGE
+# ============================================================
 
-func _update_keyboard_input() -> void:
-    var direction := Vector2.ZERO
-
-    if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-        direction.y -= 1.0
-    if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-        direction.y += 1.0
-    if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-        direction.x -= 1.0
-    if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-        direction.x += 1.0
-
-    _keyboard_input = direction.limit_length(1.0)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-    if event is InputEventScreenTouch:
-        var touch := event as InputEventScreenTouch
-
-        if touch.pressed:
-            var screen_size: Vector2 = get_viewport().get_visible_rect().size
-
-            # Left side: fixed joystick. Right side: camera control.
-            if (
-                touch.position.x < screen_size.x * 0.48
-                and _joystick_touch_id == -1
-            ):
-                _joystick_touch_id = touch.index
-                _joystick_center = _get_joystick_screen_center()
-                _update_joystick_from_position(touch.position)
-                _update_joystick_visual(touch.position)
-
-            elif (
-                touch.position.x >= screen_size.x * 0.48
-                and _camera_touch_id == -1
-            ):
-                _camera_touch_id = touch.index
-        else:
-            if touch.index == _joystick_touch_id:
-                _joystick_touch_id = -1
-                _joystick_input = Vector2.ZERO
-                _move_input = _keyboard_input
-                _reset_joystick_visual()
-
-            if touch.index == _camera_touch_id:
-                _camera_touch_id = -1
-
-    elif event is InputEventScreenDrag:
-        var drag := event as InputEventScreenDrag
-
-        if drag.index == _joystick_touch_id:
-            _update_joystick_from_position(drag.position)
-            _update_joystick_visual(drag.position)
-
-        elif drag.index == _camera_touch_id:
-            set_camera_touch_delta(drag.relative)
-
-    elif event is InputEventKey:
-        var key := event as InputEventKey
-
-        if (
-            key.pressed
-            and not key.echo
-            and key.keycode == KEY_SPACE
-            and is_on_floor()
-            and not is_dead
-        ):
-            velocity.y = jump_velocity
-
-
-func set_virtual_joystick_input(direction: Vector2) -> void:
-    _joystick_input = direction.limit_length(1.0)
-    if _joystick_touch_id == -1:
-        _move_input = _joystick_input
-
-
-func set_camera_touch_delta(delta: Vector2) -> void:
-    _camera_yaw -= delta.x * camera_sensitivity
-
-    _camera_pitch = clampf(
-        _camera_pitch + delta.y * camera_sensitivity,
-        deg_to_rad(camera_min_pitch_degrees),
-        deg_to_rad(camera_max_pitch_degrees)
-    )
-
-    _apply_camera_rotation()
-
-
-func set_hero_class(value: String) -> void:
-    hero_class = value
-
-
-func set_hero_gender(value: String) -> void:
-    hero_gender = value
-
-
-func take_damage(amount: int) -> void:
+func take_damage(amount: int, _attacker: Node = null) -> void:
     if is_dead or amount <= 0:
         return
 
     current_health = maxi(0, current_health - amount)
+    _update_health_display()
     health_changed.emit(current_health, max_health)
-    _update_health_label()
 
-    if current_health == 0:
+    if current_health <= 0:
         _die()
-
-
-func damage(amount: int) -> void:
-    take_damage(amount)
 
 
 func heal(amount: int) -> void:
     if is_dead or amount <= 0:
         return
 
+    var previous_health := current_health
     current_health = mini(max_health, current_health + amount)
-    health_changed.emit(current_health, max_health)
-    _update_health_label()
+
+    if current_health != previous_health:
+        _update_health_display()
+        health_changed.emit(current_health, max_health)
 
 
-func revive(at_position: Vector3 = Vector3.INF) -> void:
-    is_dead = false
-    current_health = clampi(respawn_health, 1, max_health)
-    velocity = Vector3.ZERO
-    _move_input = Vector2.ZERO
-    _joystick_input = Vector2.ZERO
+func set_max_health(new_maximum: int, refill: bool = false) -> void:
+    max_health = maxi(1, new_maximum)
 
-    if at_position != Vector3.INF:
-        global_position = at_position
-
-    health_changed.emit(current_health, max_health)
-    _update_health_label()
-
-    if _animation_player != null:
-        if _idle_animation_name != &"":
-            _animation_player.play(_idle_animation_name)
-        elif _walk_animation_name != &"":
-            _animation_player.play(_walk_animation_name)
-            _animation_player.pause()
-
-    player_revived.emit()
-
-
-func _create_collision() -> void:
-    var capsule := CollisionShape3D.new()
-    capsule.name = "PlayerCollision"
-
-    var shape := CapsuleShape3D.new()
-    shape.radius = 0.34
-    shape.height = 1.8
-
-    capsule.shape = shape
-    capsule.position.y = 0.9
-    add_child(capsule)
-
-
-func _load_character() -> void:
-    if (
-        character_scene_path.is_empty()
-        or not ResourceLoader.exists(character_scene_path)
-    ):
-        push_warning(
-            "Player model not found: "
-            + character_scene_path
-            + ". Player collision and controls will still work."
-        )
-        return
-
-    var resource: Resource = load(character_scene_path)
-    var packed := resource as PackedScene
-
-    if packed == null:
-        push_warning(
-            "Player model could not be loaded as a PackedScene: "
-            + character_scene_path
-        )
-        return
-
-    _model_root = Node3D.new()
-    _model_root.name = "CharacterVisual"
-    add_child(_model_root)
-
-    var instance: Node = packed.instantiate()
-    _model_root.add_child(instance)
-
-    if instance is Node3D:
-        var visual := instance as Node3D
-        visual.position = model_local_position
-        visual.scale = Vector3.ONE * character_scale
-
-    var walk_script_resource: Resource = (
-        load("res://scripts/normal_walk_animation.gd")
-        if ResourceLoader.exists("res://scripts/normal_walk_animation.gd")
-        else null
-    )
-    var walk_script := walk_script_resource as Script
-
-    if walk_script != null:
-        _walk_controller = Node.new()
-        _walk_controller.name = "NormalWalkAnimation"
-        _walk_controller.set_script(walk_script)
-        instance.add_child(_walk_controller)
+    if refill:
+        current_health = max_health
     else:
-        push_warning(
-            "Optional walk animation script not found: "
-            + "res://scripts/normal_walk_animation.gd"
-        )
+        current_health = mini(current_health, max_health)
 
-    _find_character_nodes(_model_root)
-
-
-func _find_character_nodes(node: Node) -> void:
-    if node is Skeleton3D and _skeleton == null:
-        _skeleton = node as Skeleton3D
-
-    if node is AnimationPlayer and _animation_player == null:
-        _animation_player = node as AnimationPlayer
-
-    for child in node.get_children():
-        _find_character_nodes(child)
-
-
-func _find_animations() -> void:
-    if _animation_player == null:
-        return
-
-    var animations: PackedStringArray = _animation_player.get_animation_list()
-
-    for animation_name in animations:
-        var lower_name: String = String(animation_name).to_lower()
-
-        if _walk_animation_name == &"" and (
-            lower_name == "walk"
-            or lower_name.contains("walk_fwd")
-            or lower_name.contains("walk_forward")
-            or lower_name.contains("normal_walk")
-        ):
-            _walk_animation_name = StringName(animation_name)
-
-        if _idle_animation_name == &"" and (
-            lower_name.contains("idle")
-            or lower_name.contains("stand")
-        ):
-            _idle_animation_name = StringName(animation_name)
-
-        if _death_animation_name == &"" and (
-            lower_name.contains("death")
-            or lower_name.contains("die")
-        ):
-            _death_animation_name = StringName(animation_name)
-
-    if _walk_animation_name == &"":
-        for animation_name in animations:
-            var lower_name: String = String(animation_name).to_lower()
-            if lower_name.contains("walk") or lower_name.contains("run"):
-                _walk_animation_name = StringName(animation_name)
-                break
-
-    if _idle_animation_name != &"":
-        _animation_player.play(_idle_animation_name)
-    elif _walk_animation_name != &"":
-        _animation_player.play(_walk_animation_name)
-        _animation_player.seek(0.0, true)
-        _animation_player.pause()
-
-
-func _update_character_animation(moving: bool) -> void:
-    if _animation_player == null:
-        return
-
-    var generated_walk := StringName("FamilyQuest_Normal_Walk")
-    if _animation_player.has_animation(generated_walk):
-        _walk_animation_name = generated_walk
-
-    if _walk_animation_name == &"":
-        return
-
-    if moving:
-        if (
-            _animation_player.current_animation != String(_walk_animation_name)
-            or not _animation_player.is_playing()
-        ):
-            _animation_player.play(_walk_animation_name)
-
-    elif _idle_animation_name != &"":
-        if _animation_player.current_animation != String(_idle_animation_name):
-            _animation_player.play(_idle_animation_name)
-
-    elif (
-        _animation_player.current_animation != String(_walk_animation_name)
-        or _animation_player.is_playing()
-    ):
-        _animation_player.play(_walk_animation_name)
-        _animation_player.seek(0.0, true)
-        _animation_player.pause()
-
-
-func _create_camera() -> void:
-    # The pivot follows the hero, but its local yaw is compensated
-    # so the camera can orbit independently of hero rotation.
-    _camera_pivot = Node3D.new()
-    _camera_pivot.name = "CameraPivot"
-    _camera_pivot.position = Vector3(0.0, camera_height, 0.0)
-    add_child(_camera_pivot)
-
-    _camera = Camera3D.new()
-    _camera.name = "PlayerCamera"
-    _camera.position = Vector3(0.0, 0.0, maxf(camera_distance, 1.0))
-    _camera.fov = 70.0
-    _camera.near = 0.1
-    _camera.far = 1000.0
-    _camera.current = true
-    _camera_pivot.add_child(_camera)
-
-    _apply_camera_rotation()
-    _camera.make_current()
-
-
-func _apply_camera_rotation() -> void:
-    if _camera_pivot == null:
-        return
-
-    _camera_pivot.rotation = Vector3(
-        -_camera_pitch,
-        _camera_yaw - rotation.y,
-        0.0
-    )
-
-
-func _update_camera() -> void:
-    if (
-        not is_instance_valid(_camera_pivot)
-        or not is_instance_valid(_camera)
-    ):
-        return
-
-    _camera_pivot.position = Vector3(0.0, camera_height, 0.0)
-    _apply_camera_rotation()
-
-    if not _camera.current:
-        _camera.make_current()
-
-
-func _create_mobile_controls() -> void:
-    _hud_layer = CanvasLayer.new()
-    _hud_layer.name = "PlayerMobileHUD"
-    add_child(_hud_layer)
-
-    var root := Control.new()
-    root.name = "HUDRoot"
-    root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    _hud_layer.add_child(root)
-
-    _joystick_base = Panel.new()
-    _joystick_base.name = "JoystickBase"
-    _joystick_base.size = Vector2(150.0, 150.0)
-    _joystick_base.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-    _joystick_base.position = Vector2(28.0, -178.0)
-    _joystick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-    var base_style := StyleBoxFlat.new()
-    base_style.bg_color = Color(0.12, 0.18, 0.22, 0.58)
-    base_style.corner_radius_top_left = 75
-    base_style.corner_radius_top_right = 75
-    base_style.corner_radius_bottom_left = 75
-    base_style.corner_radius_bottom_right = 75
-    base_style.set_border_width_all(3)
-    base_style.border_color = Color(0.85, 0.92, 1.0, 0.8)
-    _joystick_base.add_theme_stylebox_override("panel", base_style)
-    root.add_child(_joystick_base)
-
-    _joystick_knob = Panel.new()
-    _joystick_knob.name = "JoystickKnob"
-    _joystick_knob.size = Vector2(58.0, 58.0)
-    _joystick_knob.position = Vector2(46.0, 46.0)
-    _joystick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-    var knob_style := StyleBoxFlat.new()
-    knob_style.bg_color = Color(0.30, 0.62, 0.82, 0.95)
-    knob_style.corner_radius_top_left = 29
-    knob_style.corner_radius_top_right = 29
-    knob_style.corner_radius_bottom_left = 29
-    knob_style.corner_radius_bottom_right = 29
-    knob_style.set_border_width_all(2)
-    knob_style.border_color = Color.WHITE
-    _joystick_knob.add_theme_stylebox_override("panel", knob_style)
-    _joystick_base.add_child(_joystick_knob)
-
-    _health_label = Label.new()
-    _health_label.name = "HealthLabel"
-    _health_label.position = Vector2(22.0, 18.0)
-    _health_label.add_theme_font_size_override("font_size", 24)
-    _health_label.add_theme_color_override("font_color", Color.WHITE)
-    root.add_child(_health_label)
-
-    _update_health_label()
-
-
-func _get_joystick_screen_center() -> Vector2:
-    var screen_size: Vector2 = get_viewport().get_visible_rect().size
-    return Vector2(103.0, screen_size.y - 103.0)
-
-
-func _update_joystick_from_position(screen_position: Vector2) -> void:
-    var offset: Vector2 = (
-        screen_position - _joystick_center
-    ).limit_length(_joystick_radius)
-
-    var raw_input := Vector2(
-        offset.x / _joystick_radius,
-        offset.y / _joystick_radius
-    ).limit_length(1.0)
-
-    var strength: float = raw_input.length()
-
-    if strength <= joystick_deadzone:
-        _joystick_input = Vector2.ZERO
-        return
-
-    # Remap the dead zone so movement begins smoothly rather than jumping.
-    var adjusted_strength: float = (
-        (strength - joystick_deadzone)
-        / (1.0 - joystick_deadzone)
-    )
-    _joystick_input = (
-        raw_input.normalized() * adjusted_strength
-    ).limit_length(1.0)
-
-
-func _update_joystick_visual(screen_position: Vector2) -> void:
-    if _joystick_knob == null:
-        return
-
-    var offset: Vector2 = (
-        screen_position - _get_joystick_screen_center()
-    ).limit_length(_joystick_radius)
-
-    _joystick_knob.position = Vector2(46.0, 46.0) + offset
-
-
-func _reset_joystick_visual() -> void:
-    if _joystick_knob != null:
-        _joystick_knob.position = Vector2(46.0, 46.0)
-
-
-func _update_health_label() -> void:
-    if _health_label != null:
-        _health_label.text = "HP  %d / %d" % [
-            current_health,
-            max_health
-        ]
+    _update_health_display()
+    health_changed.emit(current_health, max_health)
 
 
 func _die() -> void:
@@ -644,9 +227,306 @@ func _die() -> void:
     is_dead = true
     velocity = Vector3.ZERO
     _move_input = Vector2.ZERO
-    _joystick_input = Vector2.ZERO
-
-    if _animation_player != null and _death_animation_name != &"":
-        _animation_player.play(_death_animation_name)
+    _joystick_vector = Vector2.ZERO
 
     player_died.emit()
+
+    # Respawn timer is handled without blocking the game.
+    await get_tree().create_timer(respawn_delay).timeout
+
+    if not is_inside_tree():
+        return
+
+    respawn()
+
+
+func respawn() -> void:
+    global_position = _respawn_position
+    rotation = _respawn_rotation
+    velocity = Vector3.ZERO
+
+    current_health = max_health
+    is_dead = false
+
+    _move_input = Vector2.ZERO
+    _joystick_vector = Vector2.ZERO
+    _joystick_touch_id = -1
+
+    _update_health_display()
+    health_changed.emit(current_health, max_health)
+    player_respawned.emit()
+
+
+func set_respawn_point(new_position: Vector3) -> void:
+    _respawn_position = new_position
+
+
+# ============================================================
+# ATTACK AND ABILITIES
+# These emit signals for the combat system to connect.
+# ============================================================
+
+func perform_attack() -> void:
+    if is_dead or _attack_timer > 0.0:
+        return
+
+    _attack_timer = attack_cooldown
+    is_attacking = true
+
+    attack_requested.emit()
+
+    # The combat system can reset this when its animation ends.
+    await get_tree().create_timer(0.25).timeout
+
+    if is_inside_tree():
+        is_attacking = false
+
+
+func use_ability(ability_name: String) -> void:
+    if is_dead or _ability_timer > 0.0:
+        return
+
+    _ability_timer = ability_cooldown
+    ability_requested.emit(ability_name)
+
+
+func dodge() -> void:
+    if is_dead:
+        return
+
+    var dodge_direction := Vector3(velocity.x, 0.0, velocity.z)
+
+    if dodge_direction.length_squared() < 0.01:
+        dodge_direction = -global_basis.z
+        dodge_direction.y = 0.0
+
+    dodge_direction = dodge_direction.normalized()
+
+    velocity.x = dodge_direction.x * move_speed * 2.0
+    velocity.z = dodge_direction.z * move_speed * 2.0
+
+
+# ============================================================
+# MOBILE HUD
+# ============================================================
+
+func _create_mobile_hud() -> void:
+    _hud_layer = CanvasLayer.new()
+    _hud_layer.name = "MobileHUD"
+    add_child(_hud_layer)
+
+    var root := Control.new()
+    root.name = "HUDRoot"
+    root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    root.mouse_filter = Control.MOUSE_FILTER_PASS
+    _hud_layer.add_child(root)
+
+    _create_health_bar(root)
+    _create_joystick(root)
+    _create_action_buttons(root)
+
+
+func _create_health_bar(root: Control) -> void:
+    var panel := PanelContainer.new()
+    panel.name = "PlayerHealthPanel"
+    panel.position = Vector2(20, 20)
+    panel.custom_minimum_size = Vector2(240, 58)
+    root.add_child(panel)
+
+    var layout := VBoxContainer.new()
+    panel.add_child(layout)
+
+    _health_text = Label.new()
+    _health_text.text = "Lv. 1  HP: %d/%d" % [
+        current_health, max_health
+    ]
+    layout.add_child(_health_text)
+
+    _health_bar = ProgressBar.new()
+    _health_bar.custom_minimum_size = Vector2(220, 18)
+    _health_bar.min_value = 0
+    _health_bar.max_value = max_health
+    _health_bar.value = current_health
+    _health_bar.show_percentage = false
+    layout.add_child(_health_bar)
+
+
+func _create_joystick(root: Control) -> void:
+    _joystick_base = Control.new()
+    _joystick_base.name = "FixedJoystick"
+    _joystick_base.custom_minimum_size = Vector2(150, 150)
+    _joystick_base.position = Vector2(35, -185)
+    _joystick_base.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+    _joystick_base.mouse_filter = Control.MOUSE_FILTER_STOP
+    root.add_child(_joystick_base)
+
+    var base_visual := Panel.new()
+    base_visual.name = "JoystickRing"
+    base_visual.position = Vector2(0, 0)
+    base_visual.size = Vector2(130, 130)
+    base_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _joystick_base.add_child(base_visual)
+
+    _joystick_knob = Panel.new()
+    _joystick_knob.name = "JoystickKnob"
+    _joystick_knob.position = Vector2(43, 43)
+    _joystick_knob.size = Vector2(44, 44)
+    _joystick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _joystick_base.add_child(_joystick_knob)
+
+
+func _create_action_buttons(root: Control) -> void:
+    _attack_button = _make_button(
+        root, "⚔", Vector2(-145, -150), Vector2(95, 95)
+    )
+    _attack_button.name = "AttackButton"
+    _attack_button.pressed.connect(perform_attack)
+
+    _heal_button = _make_button(
+        root, "♥", Vector2(-255, -105), Vector2(62, 62)
+    )
+    _heal_button.name = "HealButton"
+    _heal_button.pressed.connect(_on_heal_pressed)
+
+    _ability_button = _make_button(
+        root, "✦", Vector2(-205, -225), Vector2(62, 62)
+    )
+    _ability_button.name = "AbilityButton"
+    _ability_button.pressed.connect(
+        func(): use_ability("special")
+    )
+
+    _dodge_button = _make_button(
+        root, "➤", Vector2(-270, -180), Vector2(62, 62)
+    )
+    _dodge_button.name = "DodgeButton"
+    _dodge_button.pressed.connect(dodge)
+
+
+func _make_button(
+    root: Control,
+    button_text: String,
+    bottom_right_offset: Vector2,
+    button_size: Vector2
+) -> Button:
+    var button := Button.new()
+    button.text = button_text
+    button.custom_minimum_size = button_size
+    button.size = button_size
+    button.position = bottom_right_offset
+    button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+    button.focus_mode = Control.FOCUS_NONE
+    root.add_child(button)
+    return button
+
+
+func _on_heal_pressed() -> void:
+    # Placeholder healing amount. Connect to the real item or
+    # ability system before shipping the game.
+    heal(25)
+
+
+func _update_health_display() -> void:
+    if not is_instance_valid(_health_bar):
+        return
+
+    _health_bar.max_value = max_health
+    _health_bar.value = current_health
+
+    if is_instance_valid(_health_text):
+        _health_text.text = "Lv. 1  HP: %d/%d" % [
+            current_health, max_health
+        ]
+
+
+# ============================================================
+# TOUCH JOYSTICK
+# ============================================================
+
+func _input(event: InputEvent) -> void:
+    if is_dead or not show_touch_controls:
+        return
+
+    if event is InputEventScreenTouch:
+        if event.pressed:
+            _try_start_joystick(event)
+        elif event.index == _joystick_touch_id:
+            _joystick_touch_id = -1
+            _joystick_vector = Vector2.ZERO
+            _move_input = Vector2.ZERO
+            _update_joystick_visual()
+
+    elif event is InputEventScreenDrag:
+        if event.index == _joystick_touch_id:
+            _update_joystick_from_screen(event.position)
+
+
+func _try_start_joystick(event: InputEventScreenTouch) -> void:
+    if _joystick_touch_id != -1:
+        return
+
+    if not is_instance_valid(_joystick_base):
+        return
+
+    var base_rect := Rect2(
+        _joystick_base.global_position,
+        _joystick_base.size
+    )
+
+    if base_rect.has_point(event.position):
+        _joystick_touch_id = event.index
+        _joystick_origin = (
+            _joystick_base.global_position
+            + Vector2(65, 65)
+        )
+        _update_joystick_from_screen(event.position)
+
+
+func _update_joystick_from_screen(screen_position: Vector2) -> void:
+    var offset := screen_position - _joystick_origin
+    var max_radius := joystick_radius
+
+    if offset.length() > max_radius:
+        offset = offset.normalized() * max_radius
+
+    _joystick_vector = Vector2(
+        offset.x / max_radius,
+        offset.y / max_radius
+    )
+
+    if _joystick_vector.length() < joystick_deadzone:
+        _joystick_vector = Vector2.ZERO
+
+
+func _update_joystick_visual() -> void:
+    if not is_instance_valid(_joystick_knob):
+        return
+
+    var center := Vector2(43, 43)
+    var offset := _joystick_vector * joystick_radius
+
+    _joystick_knob.position = center + offset
+
+
+# ============================================================
+# OPTIONAL INTEGRATION HELPERS
+# ============================================================
+
+func get_current_health() -> int:
+    return current_health
+
+
+func get_max_health() -> int:
+    return max_health
+
+
+func is_player_alive() -> bool:
+    return not is_dead
+
+
+func set_movement_enabled(enabled: bool) -> void:
+    if not enabled:
+        _move_input = Vector2.ZERO
+        _joystick_vector = Vector2.ZERO
+        velocity.x = 0.0
+        velocity.z = 0.0
