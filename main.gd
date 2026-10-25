@@ -96,11 +96,13 @@ func _ready() -> void:
 func _create_environment() -> void:
     var world := WorldEnvironment.new()
     var env := Environment.new()
+
     env.background_mode = Environment.BG_COLOR
     env.background_color = Color(0.48, 0.72, 0.9)
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
     env.ambient_light_color = Color(0.8, 0.86, 1.0)
     env.ambient_light_energy = 0.8
+
     world.environment = env
     add_child(world)
 
@@ -109,14 +111,87 @@ func _create_environment() -> void:
     light.shadow_enabled = true
     add_child(light)
 
+    # FULL PLAYABLE WORLD: 400 x 400 units
+    # Centered at Z = -15 to keep the existing town and castle
+    # within the new world without changing their coordinates.
     _add_box(
         "MainGround",
-        Vector3(0, -0.3, 10),
-        Vector3(70, 0.5, 100),
+        Vector3(0, -0.3, -15),
+        Vector3(400, 0.5, 400),
         Color(0.32, 0.55, 0.28),
         true
     )
 
+    _create_world_boundaries()
+func _create_world_boundaries() -> void:
+    var boundary_color := Color("#355B31")
+
+    # West boundary
+    _add_box(
+        "WorldBoundaryWest",
+        Vector3(-199, 2, -15),
+        Vector3(2, 4, 400),
+        boundary_color,
+        true
+    )
+
+    # East boundary
+    _add_box(
+        "WorldBoundaryEast",
+        Vector3(199, 2, -15),
+        Vector3(2, 4, 400),
+        boundary_color,
+        true
+    )
+
+    # Northern boundary
+    _add_box(
+        "WorldBoundaryNorth",
+        Vector3(0, 2, -214),
+        Vector3(400, 4, 2),
+        boundary_color,
+        true
+    )
+
+    # Southern boundary
+    _add_box(
+        "WorldBoundarySouth",
+        Vector3(0, 2, 184),
+        Vector3(400, 4, 2),
+        boundary_color,
+        true
+    )
+
+    env.background_mode = Environment.BG_COLOR
+    env.background_color = Color(0.48, 0.72, 0.9)
+    env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+    env.ambient_light_color = Color(0.8, 0.86, 1.0)
+    env.ambient_light_energy = 0.8
+
+    world.environment = env
+    add_child(world)
+
+    
+
+    var light := DirectionalLight3D.new()
+    light.rotation_degrees = Vector3(-55, -25, 0)
+    light.shadow_enabled = true
+    add_child(light)
+
+    # Full playable world: 400 x 400 units.
+    # Centered at Z = -15 to preserve the existing town layout.
+    _add_box(
+        "MainGround",
+        Vector3(0, -0.3, -15),
+        Vector3(400, 0.5, 400),
+        Color(0.32, 0.55, 0.28),
+        true
+    )
+
+    _create_world_boundaries()
+
+
+func _build_village() -> void:
 
 func _build_village() -> void:
     _add_box(
