@@ -1,340 +1,325 @@
 
 extends Node3D
 
-# ============================================================
-# FAMILY QUEST - MAIN GAME SCRIPT
-# Godot 4.3 | Designed to work with your existing player.gd
-# ============================================================
+# ==================================================
+# FAMILY QUEST - HEARTHVALE
+# Godot 4.3 | Main game controller
+# ==================================================
 
 const PLAYER_SCRIPT = preload("res://player.gd")
+const ENEMY_SCRIPT = preload("res://enemy.gd")
 
 const PLAYER_START := Vector3(0.0, 0.0, 10.0)
 const ATTACK_RANGE := 3.5
+const INTERACT_RANGE := 4.0
+const MOBS_REQUIRED := 3
+const PATH_MOBS_REQUIRED := 5
 
 var player: CharacterBody3D
-
-var hero_class := "Warrior"
-var silver := 0
-var chore_gold := 0
-var quest_stage := 0
-var enemies_defeated := 0
-var herbs_collected := 0
-var crates_collected := 0
+var camera: Camera3D
 
 var enemies: Array[Node3D] = []
 var npcs: Array[Node3D] = []
 var objectives: Array[Node3D] = []
 
+var hero_class := "Warrior"
+var hero_gender := "Male"
+
+var level := 1
+var xp := 0
+var xp_to_next_level := 100
+var silver := 0
+var chore_gold := 0
+var potions := 3
+
+var quest_stage := 0
+var enemies_defeated := 0
+var path_enemies_defeated := 0
+var herbs_collected := 0
+var crates_collected := 0
+
 var attack_cooldown := 0.0
 var message_timer := 0.0
+var dead := false
 
-var hud: CanvasLayer
 var health_label: Label
 var level_label: Label
 var currency_label: Label
 var class_label: Label
 var quest_label: Label
 var message_label: Label
+
 var attack_button: Button
 var interact_button: Button
 var potion_button: Button
 var respawn_button: Button
+var class_buttons: HBoxContainer
 
-var level := 1
-var xp := 0
-var potions := 3
 
-var ground_material: StandardMaterial3D
-var road_material: StandardMaterial3D
-var stone_material: StandardMaterial3D
-var wood_material: StandardMaterial3D
-var roof_material: StandardMaterial3D
-var herb_material: StandardMaterial3D
-var enemy_material: StandardMaterial3D
-var gold_material: StandardMaterial3D
-
+# ==================================================
+# STARTUP
+# ==================================================
 
 func _ready() -> void:
-    randomize()
-    _create_materials()
     _create_environment()
     _create_world()
-    _create_player()
     _create_village()
+    _create_player()
     _create_npcs()
     _create_objectives()
     _create_enemies()
+    _create_camera()
     _create_hud()
-    _refresh_hud()
-    _show_message("Welcome to Hearthvale! Find the Village Elder.")
+
+    _refresh()
+    _message("Welcome to Hearthvale! Speak to the Elder.")
 
 
 func _process(delta: float) -> void:
-    if attack_cooldown > 0.0:
-        attack_cooldown -= delta
+    attack_cooldown = maxf(0.0, attack_cooldown - delta)
+    message_timer = maxf(0.0, message_timer - delta)
 
-    if message_timer > 0.0:
-        message_timer -= delta
-        if message_timer <= 0.0 and is_instance_valid(message_label):
-            message_label.text = ""
+    if message_timer <= 0.0 and is_instance_valid(message_label):
+        message_label.text = ""
 
-
-# ============================================================
-# MATERIALS
-# ============================================================
-
-func _make_material(color: Color) -> StandardMaterial3D:
-    var mat := StandardMaterial3D.new()
-    mat.albedo_color = color
-    mat.roughness = 0.85
-    return mat
+    _update_camera()
 
 
-func _create_materials() -> void:
-    ground_material = _make_material(Color(0.20, 0.39, 0.18))
-    road_material = _make_material(Color(0.39, 0.38, 0.34))
-    stone_material = _make_material(Color(0.43, 0.44, 0.47))
-    wood_material = _make_material(Color(0.34, 0.19, 0.09))
-    roof_material = _make_material(Color(0.40, 0.12, 0.10))
-    herb_material = _make_material(Color(0.20, 0.85, 0.25))
-    enemy_material = _make_material(Color(0.70, 0.14, 0.12))
-    gold_material = _make_material(Color(0.95, 0.68, 0.10))
-
+# ==================================================
+# ENVIRONMENT AND WORLD
+# ==================================================
 
 func _create_environment() -> void:
-    var world_env := WorldEnvironment.new()
-    var env := Environment.new()
+    var world_environment := WorldEnvironment.new()
+    var environment := Environment.new()
 
-    env.background_mode = Environment.BG_SKY
-    env.sky = Sky.new()
-    env.sky.sky_material = ProceduralSkyMaterial.new()
-    env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    env.ambient_light_color = Color(0.75, 0.80, 0.92)
-    env.ambient_light_energy = 0.8
-    world_env.environment = env
-    add_child(world_env)
+    environment.background_mode = Environment.BG_SKY
+    environment.sky = Sky.new()
+    environment.sky.sky_material = ProceduralSkyMaterial.new()
+    environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+    environment.ambient_light_color = Color(0.65, 0.72, 0.82)
+    environment.ambient_light_energy = 0.8
+    environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+
+    world_environment.environment = environment
+    add_child(world_environment)
 
     var sun := DirectionalLight3D.new()
-    sun.name = "Sunlight"
-    sun.rotation_degrees = Vector3(-45.0, -30.0, 0.0)
+    sun.rotation_degrees = Vector3(-50.0, -30.0, 0.0)
     sun.light_energy = 1.2
-    sun.shadow_enabled = true
     add_child(sun)
 
 
-# ============================================================
-# WORLD
-# ============================================================
-
 func _create_world() -> void:
     _make_box(
-        self, "Ground",
-        Vector3(100.0, 1.0, 100.0),
-        Vector3(0.0, -0.5, 0.0),
-        ground_material, true
+        "Ground",
+        Vector3(360.0, 1.0, 400.0),
+        Vector3(0.0, -0.6, 0.0),
+        Color(0.22, 0.43, 0.19),
+        true
+    )
+
+    # Village road.
+    _make_box(
+        "VillageRoad",
+        Vector3(12.0, 0.12, 100.0),
+        Vector3(0.0, 0.0, 0.0),
+        Color(0.48, 0.39, 0.27),
+        false
+    )
+
+    # Path leading into the forest.
+    _make_box(
+        "ForestPath",
+        Vector3(7.0, 0.13, 100.0),
+        Vector3(0.0, 0.01, -90.0),
+        Color(0.48, 0.38, 0.25),
+        false
+    )
+
+    # Simple boundary walls.
+    _make_box(
+        "NorthBoundary",
+        Vector3(360.0, 5.0, 2.0),
+        Vector3(0.0, 2.0, -200.0),
+        Color(0.18, 0.30, 0.14),
+        true
     )
 
     _make_box(
-        self, "VillageRoad",
-        Vector3(7.0, 0.08, 55.0),
-        Vector3(0.0, 0.04, -8.0),
-        road_material, false
+        "SouthBoundary",
+        Vector3(360.0, 5.0, 2.0),
+        Vector3(0.0, 2.0, 200.0),
+        Color(0.18, 0.30, 0.14),
+        true
     )
 
     _make_box(
-        self, "ForestPath",
-        Vector3(5.0, 0.09, 35.0),
-        Vector3(0.0, 0.05, -38.0),
-        road_material, false
+        "WestBoundary",
+        Vector3(2.0, 5.0, 400.0),
+        Vector3(-180.0, 2.0, 0.0),
+        Color(0.18, 0.30, 0.14),
+        true
     )
 
-    # Outer boundaries.
-    _make_box(self, "NorthBoundary",
-        Vector3(100.0, 5.0, 1.0),
-        Vector3(0.0, 2.0, -50.0), stone_material, true)
+    _make_box(
+        "EastBoundary",
+        Vector3(2.0, 5.0, 400.0),
+        Vector3(180.0, 2.0, 0.0),
+        Color(0.18, 0.30, 0.14),
+        true
+    )
 
-    _make_box(self, "SouthBoundary",
-        Vector3(100.0, 5.0, 1.0),
-        Vector3(0.0, 2.0, 50.0), stone_material, true)
+    # Trees on both sides of the forest path.
+    for i in range(18):
+        var z_position := -35.0 - float(i) * 7.0
 
-    _make_box(self, "EastBoundary",
-        Vector3(1.0, 5.0, 100.0),
-        Vector3(50.0, 2.0, 0.0), stone_material, true)
+        _create_tree(
+            Vector3(-12.0 - float(i % 3) * 3.0, 0.0, z_position)
+        )
 
-    _make_box(self, "WestBoundary",
-        Vector3(1.0, 5.0, 100.0),
-        Vector3(-50.0, 2.0, 0.0), stone_material, true)
-
-    # Trees line the forest path.
-    for i in range(14):
-        var z := -25.0 - float(i) * 1.5
-        _create_tree(Vector3(-8.0 - randf_range(0.0, 5.0), 0.0, z))
-        _create_tree(Vector3(8.0 + randf_range(0.0, 5.0), 0.0, z))
+        _create_tree(
+            Vector3(12.0 + float(i % 4) * 3.0, 0.0, z_position - 3.0)
+        )
 
 
-func _make_box(
-    parent: Node3D,
-    object_name: String,
-    box_size: Vector3,
-    object_position: Vector3,
-    mat: Material,
-    collision_enabled: bool
-) -> Node3D:
-    var holder: Node3D
-
-    if collision_enabled:
-        var body := StaticBody3D.new()
-        body.name = object_name
-        parent.add_child(body)
-        holder = body
-
-        var collision := CollisionShape3D.new()
-        var shape := BoxShape3D.new()
-        shape.size = box_size
-        collision.shape = shape
-        body.add_child(collision)
-    else:
-        holder = Node3D.new()
-        holder.name = object_name
-        parent.add_child(holder)
-
-    var mesh_instance := MeshInstance3D.new()
-    var mesh := BoxMesh.new()
-    mesh.size = box_size
-    mesh_instance.mesh = mesh
-    mesh_instance.material_override = mat
-    holder.add_child(mesh_instance)
-
-    holder.position = object_position
-    return holder
-
-
-func _create_tree(tree_position: Vector3) -> void:
+func _create_tree(pos: Vector3) -> void:
     var tree := Node3D.new()
-    tree.name = "ForestTree"
-    tree.position = tree_position
+    tree.name = "Tree"
+    tree.position = pos
     add_child(tree)
 
     var trunk := MeshInstance3D.new()
     var trunk_mesh := CylinderMesh.new()
-    trunk_mesh.top_radius = 0.22
-    trunk_mesh.bottom_radius = 0.32
-    trunk_mesh.height = 2.0
+    trunk_mesh.top_radius = 0.25
+    trunk_mesh.bottom_radius = 0.4
+    trunk_mesh.height = 2.5
     trunk.mesh = trunk_mesh
-    trunk.material_override = wood_material
-    trunk.position.y = 1.0
+    trunk.position.y = 1.25
+
+    var trunk_material := StandardMaterial3D.new()
+    trunk_material.albedo_color = Color(0.30, 0.18, 0.10)
+    trunk.material_override = trunk_material
     tree.add_child(trunk)
 
     var leaves := MeshInstance3D.new()
     var leaves_mesh := SphereMesh.new()
-    leaves_mesh.radius = 1.25
-    leaves_mesh.height = 2.4
+    leaves_mesh.radius = 1.5
+    leaves_mesh.height = 3.0
     leaves.mesh = leaves_mesh
-    leaves.material_override = _make_material(
-        Color(0.10, randf_range(0.27, 0.38), 0.12)
-    )
-    leaves.position.y = 2.6
+    leaves.position.y = 3.0
+
+    var leaf_material := StandardMaterial3D.new()
+    leaf_material.albedo_color = Color(0.10, 0.32, 0.12)
+    leaves.material_override = leaf_material
     tree.add_child(leaves)
-
-
-func _create_building(
-    building_name: String,
-    building_position: Vector3,
-    building_size: Vector3
-) -> void:
-    var building := Node3D.new()
-    building.name = building_name
-    building.position = building_position
-    add_child(building)
-
-    var body := MeshInstance3D.new()
-    var body_mesh := BoxMesh.new()
-    body_mesh.size = building_size
-    body.mesh = body_mesh
-    body.material_override = wood_material
-    body.position.y = building_size.y * 0.5
-    building.add_child(body)
-
-    var roof := MeshInstance3D.new()
-    var roof_mesh := PrismMesh.new()
-    roof_mesh.size = Vector3(
-        building_size.x + 1.0,
-        1.6,
-        building_size.z + 1.0
-    )
-    roof.mesh = roof_mesh
-    roof.material_override = roof_material
-    roof.position.y = building_size.y + 0.6
-    building.add_child(roof)
-
-    var collision_body := StaticBody3D.new()
-    collision_body.name = "BuildingCollision"
-    building.add_child(collision_body)
-
-    var collision := CollisionShape3D.new()
-    var shape := BoxShape3D.new()
-    shape.size = building_size
-    collision.shape = shape
-    collision.position.y = building_size.y * 0.5
-    collision_body.add_child(collision)
 
 
 func _create_village() -> void:
     _create_building(
-        "VillageElderHouse",
-        Vector3(-11.0, 0.0, -8.0),
-        Vector3(7.0, 4.0, 6.0)
+        "ElderHall",
+        Vector3(-10.0, 0.0, 0.0),
+        Vector3(9.0, 5.0, 8.0),
+        Color(0.48, 0.34, 0.23)
     )
 
     _create_building(
         "Blacksmith",
-        Vector3(11.0, 0.0, -8.0),
-        Vector3(7.0, 4.0, 6.0)
+        Vector3(12.0, 0.0, 8.0),
+        Vector3(8.0, 4.5, 7.0),
+        Color(0.35, 0.34, 0.32)
     )
 
     _create_building(
-        "VillageShop",
-        Vector3(-11.0, 0.0, 5.0),
-        Vector3(7.0, 4.0, 6.0)
+        "GeneralStore",
+        Vector3(-12.0, 0.0, 14.0),
+        Vector3(7.0, 4.0, 7.0),
+        Color(0.55, 0.42, 0.25)
     )
 
     _create_building(
-        "VillageInn",
-        Vector3(11.0, 0.0, 5.0),
-        Vector3(7.0, 4.0, 6.0)
+        "HouseEast",
+        Vector3(14.0, 0.0, -8.0),
+        Vector3(7.0, 4.0, 7.0),
+        Color(0.54, 0.38, 0.28)
     )
 
-    # Castle wall behind the village.
-    _make_box(self, "CastleBackWall",
-        Vector3(25.0, 5.0, 1.0),
-        Vector3(0.0, 2.5, -20.0), stone_material, true)
-
-    _make_box(self, "CastleLeftWall",
-        Vector3(1.0, 5.0, 12.0),
-        Vector3(-12.0, 2.5, -14.0), stone_material, true)
-
-    _make_box(self, "CastleRightWall",
-        Vector3(1.0, 5.0, 12.0),
-        Vector3(12.0, 2.5, -14.0), stone_material, true)
-
-    _make_box(self, "CampfireBase",
-        Vector3(2.0, 0.3, 2.0),
-        Vector3(0.0, 0.15, 2.0), stone_material, false)
-
-    var fire := MeshInstance3D.new()
-    var fire_mesh := SphereMesh.new()
-    fire_mesh.radius = 0.45
-    fire_mesh.height = 0.9
-    fire.mesh = fire_mesh
-    fire.material_override = _make_material(Color(1.0, 0.30, 0.04))
-    fire.position = Vector3(0.0, 0.8, 2.0)
-    add_child(fire)
+    _create_building(
+        "HouseWest",
+        Vector3(-14.0, 0.0, -10.0),
+        Vector3(7.0, 4.0, 7.0),
+        Color(0.46, 0.36, 0.27)
+    )
 
 
-# ============================================================
-# PLAYER
-# Uses the real player.gd controller and its own camera/joystick.
-# ============================================================
+func _create_building(
+    building_name: String,
+    pos: Vector3,
+    dimensions: Vector3,
+    wall_color: Color
+) -> void:
+    var building := Node3D.new()
+    building.name = building_name
+    building.position = pos
+    add_child(building)
+
+    _make_box(
+        building_name + "_Walls",
+        dimensions,
+        pos + Vector3(0.0, dimensions.y * 0.5, 0.0),
+        wall_color,
+        true
+    )
+
+    _make_box(
+        building_name + "_Roof",
+        Vector3(
+            dimensions.x + 1.5,
+            0.7,
+            dimensions.z + 1.5
+        ),
+        pos + Vector3(0.0, dimensions.y + 0.25, 0.0),
+        Color(0.28, 0.13, 0.12),
+        true
+    )
+
+
+func _make_box(
+    object_name: String,
+    dimensions: Vector3,
+    pos: Vector3,
+    color: Color,
+    with_collision: bool = true
+) -> Node3D:
+    var body := StaticBody3D.new() if with_collision else Node3D.new()
+    body.name = object_name
+    body.position = pos
+    add_child(body)
+
+    var mesh_instance := MeshInstance3D.new()
+    var mesh := BoxMesh.new()
+    mesh.size = dimensions
+    mesh_instance.mesh = mesh
+
+    var material := StandardMaterial3D.new()
+    material.albedo_color = color
+    material.roughness = 0.9
+    mesh_instance.material_override = material
+    body.add_child(mesh_instance)
+
+    if with_collision:
+        var collision := CollisionShape3D.new()
+        var shape := BoxShape3D.new()
+        shape.size = dimensions
+        collision.shape = shape
+        body.add_child(collision)
+
+    return body
+
+
+# ==================================================
+# PLAYER AND CAMERA
+# ==================================================
 
 func _create_player() -> void:
     player = CharacterBody3D.new()
@@ -356,312 +341,458 @@ func _create_player() -> void:
         player.call("set_hero_class", hero_class)
 
     if player.has_method("set_hero_gender"):
-        player.call("set_hero_gender", "Male")
+        player.call("set_hero_gender", hero_gender)
 
 
-func _on_player_health_changed(current_health: int, maximum_health: int) -> void:
-    if is_instance_valid(health_label):
-        health_label.text = "HP: %d / %d" % [
-            current_health,
-            maximum_health
-        ]
+func _create_camera() -> void:
+    camera = Camera3D.new()
+    camera.name = "GameCamera"
+    camera.current = true
+    camera.fov = 70.0
+    camera.position = Vector3(0.0, 7.0, 10.0)
+    add_child(camera)
+
+    _update_camera()
 
 
-func _on_player_died() -> void:
-    _show_message("You have been defeated. Press RESPAWN.")
+func _update_camera() -> void:
+    if not is_instance_valid(camera) or not is_instance_valid(player):
+        return
+
+    var target_position := player.global_position + Vector3(0.0, 6.0, 9.0)
+
+    camera.global_position = camera.global_position.lerp(
+        target_position,
+        0.12
+    )
+
+    camera.look_at(
+        player.global_position + Vector3(0.0, 1.0, 0.0),
+        Vector3.UP
+    )
 
 
-func _on_player_revived() -> void:
-    _show_message("You have returned to Hearthvale.")
-
-
-# ============================================================
-# NPCS
-# ============================================================
+# ==================================================
+# NPCS AND INTERACTABLE OBJECTS
+# ==================================================
 
 func _create_npcs() -> void:
     _create_npc(
-        "Village Elder",
-        Vector3(0.0, 0.0, -4.0),
-        Color(0.75, 0.60, 0.30),
-        "elder"
+        "Elder",
+        "Elder",
+        Vector3(-4.0, 0.0, 0.0),
+        Color(0.75, 0.65, 0.43)
     )
 
     _create_npc(
         "Blacksmith",
-        Vector3(7.0, 0.0, -6.0),
-        Color(0.45, 0.45, 0.48),
-        "blacksmith"
+        "Blacksmith",
+        Vector3(8.0, 0.0, 8.0),
+        Color(0.42, 0.43, 0.48)
     )
 
     _create_npc(
-        "Village Merchant",
-        Vector3(-7.0, 0.0, 5.0),
-        Color(0.20, 0.65, 0.35),
-        "merchant"
+        "Merchant",
+        "Merchant",
+        Vector3(-8.0, 0.0, 12.0),
+        Color(0.25, 0.48, 0.28)
+    )
+
+    _create_npc(
+        "Guard",
+        "Guard",
+        Vector3(0.0, 0.0, -5.0),
+        Color(0.25, 0.35, 0.55)
     )
 
 
 func _create_npc(
     npc_name: String,
-    npc_position: Vector3,
-    npc_color: Color,
-    npc_role: String
+    role: String,
+    pos: Vector3,
+    color: Color
 ) -> void:
     var npc := Node3D.new()
     npc.name = npc_name
-    npc.position = npc_position
-    npc.set_meta("role", npc_role)
+    npc.position = pos
+    npc.set_meta("interactable", true)
+    npc.set_meta("interaction_type", "npc")
+    npc.set_meta("role", role)
+    npc.set_meta("display_name", npc_name)
     add_child(npc)
 
     var body := MeshInstance3D.new()
-    var body_mesh := CapsuleMesh.new()
-    body_mesh.radius = 0.4
-    body_mesh.height = 1.6
-    body.mesh = body_mesh
-    body.material_override = _make_material(npc_color)
+    var capsule := CapsuleMesh.new()
+    capsule.radius = 0.38
+    capsule.height = 1.6
+    body.mesh = capsule
     body.position.y = 0.8
+
+    var material := StandardMaterial3D.new()
+    material.albedo_color = color
+    body.material_override = material
     npc.add_child(body)
 
     var head := MeshInstance3D.new()
     var head_mesh := SphereMesh.new()
-    head_mesh.radius = 0.26
+    head_mesh.radius = 0.25
     head_mesh.height = 0.5
     head.mesh = head_mesh
-    head.material_override = _make_material(Color(0.84, 0.66, 0.51))
-    head.position.y = 1.7
+    head.position.y = 1.75
+
+    var head_material := StandardMaterial3D.new()
+    head_material.albedo_color = Color(0.78, 0.61, 0.47)
+    head.material_override = head_material
     npc.add_child(head)
+
+    var label := Label3D.new()
+    label.text = npc_name
+    label.position.y = 2.2
+    label.font_size = 32
+    label.pixel_size = 0.005
+    label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+    npc.add_child(label)
 
     npcs.append(npc)
 
 
-# ============================================================
-# QUEST OBJECTIVES
-# ============================================================
-
 func _create_objectives() -> void:
-    _create_objective("Herb1", Vector3(-4.0, 0.0, -28.0), "herb")
-    _create_objective("Herb2", Vector3(4.0, 0.0, -32.0), "herb")
-    _create_objective("Herb3", Vector3(-7.0, 0.0, -36.0), "herb")
-    _create_objective("Crate1", Vector3(7.0, 0.0, -30.0), "crate")
-    _create_objective("Crate2", Vector3(-8.0, 0.0, -41.0), "crate")
+    _create_objective(
+        "QuestBoard",
+        "quest_board",
+        Vector3(0.0, 0.0, 4.0),
+        Color(0.42, 0.25, 0.12)
+    )
+
+    for i in range(6):
+        _create_objective(
+            "Herb_" + str(i + 1),
+            "herb",
+            Vector3(
+                -7.0 + float(i % 3) * 5.0,
+                0.0,
+                -24.0 - float(i / 3) * 5.0
+            ),
+            Color(0.15, 0.8, 0.2)
+        )
+
+    for i in range(5):
+        _create_objective(
+            "SupplyCrate_" + str(i + 1),
+            "crate",
+            Vector3(
+                -5.0 + float(i % 3) * 5.0,
+                0.0,
+                -12.0 - float(i / 3) * 5.0
+            ),
+            Color(0.55, 0.32, 0.12)
+        )
 
 
 func _create_objective(
     object_name: String,
-    object_position: Vector3,
-    objective_type: String
+    objective_type: String,
+    pos: Vector3,
+    color: Color
 ) -> void:
-    var objective := Node3D.new()
+    var objective := StaticBody3D.new()
     objective.name = object_name
-    objective.position = object_position
-    objective.set_meta("objective_type", objective_type)
+    objective.position = pos
+    objective.set_meta("interactable", true)
+    objective.set_meta("interaction_type", objective_type)
+    objective.set_meta("display_name", object_name)
     objective.set_meta("collected", false)
     add_child(objective)
 
     var mesh_instance := MeshInstance3D.new()
 
     if objective_type == "herb":
-        var herb_mesh := SphereMesh.new()
-        herb_mesh.radius = 0.35
-        herb_mesh.height = 0.7
-        mesh_instance.mesh = herb_mesh
-        mesh_instance.material_override = herb_material
+        var mesh := SphereMesh.new()
+        mesh.radius = 0.35
+        mesh.height = 0.7
+        mesh_instance.mesh = mesh
+        mesh_instance.position.y = 0.35
     else:
-        var crate_mesh := BoxMesh.new()
-        crate_mesh.size = Vector3(0.9, 0.8, 0.9)
-        mesh_instance.mesh = crate_mesh
-        mesh_instance.material_override = wood_material
+        var mesh := BoxMesh.new()
+        mesh.size = Vector3(0.9, 0.9, 0.9)
+        mesh_instance.mesh = mesh
+        mesh_instance.position.y = 0.45
 
-    mesh_instance.position.y = 0.45
+    var material := StandardMaterial3D.new()
+    material.albedo_color = color
+    mesh_instance.material_override = material
     objective.add_child(mesh_instance)
+
+    var collision := CollisionShape3D.new()
+    var shape := BoxShape3D.new()
+    shape.size = Vector3(1.0, 1.0, 1.0)
+    collision.shape = shape
+    collision.position.y = 0.5
+    objective.add_child(collision)
+
+    var label := Label3D.new()
+    label.text = "Quest Board" if objective_type == "quest_board" else (
+        "Herb" if objective_type == "herb" else "Supply Crate"
+    )
+    label.position.y = 1.2
+    label.font_size = 24
+    label.pixel_size = 0.004
+    label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+    objective.add_child(label)
+
     objectives.append(objective)
 
 
-# ============================================================
-# ENEMIES
-# ============================================================
+# ==================================================
+# ENEMY SPAWNING
+# ==================================================
 
 func _create_enemies() -> void:
-    _create_enemy("Forest Slime", Vector3(-5.0, 0.0, -33.0), 40)
-    _create_enemy("Forest Slime", Vector3(5.0, 0.0, -38.0), 40)
-    _create_enemy("Woodland Goblin", Vector3(10.0, 0.0, -42.0), 75)
-    _create_enemy("Woodland Goblin", Vector3(-10.0, 0.0, -44.0), 75)
-    _create_enemy("Forest Slime", Vector3(2.0, 0.0, -47.0), 40)
+    # Village outskirts.
+    _spawn_enemy("Forest Slime", Vector3(-8.0, 0.0, -28.0))
+    _spawn_enemy("Forest Slime", Vector3(8.0, 0.0, -32.0))
+    _spawn_enemy("Woodland Goblin", Vector3(13.0, 0.0, -38.0))
+
+    # Forest path enemies.
+    _spawn_enemy("Thornwolf", Vector3(-9.0, 0.0, -65.0))
+    _spawn_enemy("Woodland Goblin", Vector3(9.0, 0.0, -72.0))
+    _spawn_enemy("Forest Slime", Vector3(-10.0, 0.0, -82.0))
+    _spawn_enemy("Thornwolf", Vector3(10.0, 0.0, -91.0))
+    _spawn_enemy("Woodland Goblin", Vector3(0.0, 0.0, -102.0))
+
+    # First-area boss.
+    _spawn_enemy("Mossjaw", Vector3(0.0, 0.0, -125.0), true)
 
 
-func _create_enemy(
-    enemy_name: String,
-    enemy_position: Vector3,
-    enemy_hp: int
+func _spawn_enemy(
+    enemy_type: String,
+    spawn_position: Vector3,
+    boss: bool = false
 ) -> void:
-    var enemy := Node3D.new()
-    enemy.name = enemy_name
-    enemy.position = enemy_position
-    enemy.set_meta("hp", enemy_hp)
-    enemy.set_meta("max_hp", enemy_hp)
-    enemy.set_meta("dead", false)
-    enemy.set_meta("enemy_name", enemy_name)
+    var enemy := CharacterBody3D.new()
+    enemy.name = enemy_type
+    enemy.set_script(ENEMY_SCRIPT)
+    enemy.position = spawn_position
+
+    enemy.set("enemy_name", enemy_type)
+    enemy.set("is_boss", boss)
+
     add_child(enemy)
 
-    var body := MeshInstance3D.new()
-
-    if enemy_name == "Forest Slime":
-        var mesh := SphereMesh.new()
-        mesh.radius = 0.6
-        mesh.height = 1.0
-        body.mesh = mesh
-    else:
-        var mesh := CapsuleMesh.new()
-        mesh.radius = 0.43
-        mesh.height = 1.5
-        body.mesh = mesh
-
-    body.material_override = enemy_material
-    body.position.y = 0.65
-    enemy.add_child(body)
-
-    var marker := MeshInstance3D.new()
-    var marker_mesh := SphereMesh.new()
-    marker_mesh.radius = 0.13
-    marker_mesh.height = 0.26
-    marker.mesh = marker_mesh
-    marker.material_override = gold_material
-    marker.position.y = 1.55
-    enemy.add_child(marker)
+    if enemy.has_method("set"):
+        enemy.set("player", player)
 
     enemies.append(enemy)
 
 
-# ============================================================
+# ==================================================
 # COMBAT
-# ============================================================
+# ==================================================
 
 func _attack() -> void:
-    if not is_instance_valid(player):
+    if dead or attack_cooldown > 0.0 or not is_instance_valid(player):
         return
 
-    if bool(player.get("is_dead")):
-        return
+    attack_cooldown = 0.5
 
-    if attack_cooldown > 0.0:
-        return
-
-    attack_cooldown = 0.6
-
-    var closest_enemy: Node3D = null
+    var closest_enemy: Node3D
     var closest_distance := ATTACK_RANGE
 
     for enemy in enemies:
         if not is_instance_valid(enemy):
             continue
 
-        if bool(enemy.get_meta("dead", false)):
+        if enemy.get("dead") == true:
             continue
 
         var distance := player.global_position.distance_to(
             enemy.global_position
         )
 
-        if distance <= closest_distance:
-            closest_enemy = enemy
+        if distance < closest_distance:
             closest_distance = distance
+            closest_enemy = enemy
 
-    if closest_enemy == null:
-        _show_message("No enemy in range. Move closer.")
+    if not is_instance_valid(closest_enemy):
+        _message("No enemy in attack range.")
         return
 
-    var damage_amount := 25
+    var damage := 20
 
     match hero_class:
         "Warrior":
-            damage_amount = 35
+            damage = 25
         "Mage":
-            damage_amount = 30
+            damage = 22
         "Rogue":
-            damage_amount = 32
+            damage = 20
         "Druid":
-            damage_amount = 27
+            damage = 18
         "Ranger":
-            damage_amount = 30
+            damage = 21
 
-    var hp := int(closest_enemy.get_meta("hp", 1))
-    hp -= damage_amount
-    closest_enemy.set_meta("hp", hp)
-
-    if hp <= 0:
-        _defeat_enemy(closest_enemy)
+    if closest_enemy.has_method("take_hit"):
+        closest_enemy.call("take_hit", damage)
     else:
-        _show_message(
-            "%s hit! Enemy HP: %d" % [
-                str(closest_enemy.get_meta("enemy_name", "Enemy")),
-                hp
-            ]
-        )
+        _message("Enemy combat script is missing.")
 
 
-func _defeat_enemy(enemy: Node3D) -> void:
-    enemy.set_meta("dead", true)
-    enemies_defeated += 1
-    xp += 25
-    silver += 5
-    enemy.queue_free()
+func enemy_defeated(enemy: Node3D) -> void:
+    if not is_instance_valid(enemy):
+        return
 
-    if xp >= level * 100:
-        xp -= level * 100
+    var enemy_type := str(enemy.get("enemy_name"))
+    var boss := enemy.get("is_boss") == true
+
+    xp += 35 if boss else 20
+    silver += 50 if boss else 8
+
+    if str(enemy_type) == "Forest Slime" or str(enemy_type) == "Woodland Goblin":
+        enemies_defeated += 1
+    else:
+        path_enemies_defeated += 1
+
+    _check_level_up()
+    _update_quest_progress()
+    _refresh()
+
+    if boss:
+        _message("Mossjaw defeated! The forest boss is down!")
+    else:
+        _message("%s defeated! Earned XP and silver." % enemy_type)
+
+
+func _check_level_up() -> void:
+    while xp >= xp_to_next_level:
+        xp -= xp_to_next_level
         level += 1
-        _show_message("Level up! You reached level %d." % level)
-    else:
-        _show_message("Enemy defeated! +25 XP and +5 Silver.")
+        xp_to_next_level = level * 100
 
-    _refresh_hud()
+        if is_instance_valid(player):
+            if player.has_method("set_max_health"):
+                player.call("set_max_health", 100 + (level - 1) * 10)
+
+            if player.has_method("heal"):
+                player.call("heal", 100)
+
+        _message("Level up! You are now level %d." % level)
 
 
-func _use_potion() -> void:
-    if not is_instance_valid(player):
+# ==================================================
+# INTERACTION
+# Tap the world or use the Interact button.
+# ==================================================
+
+func _unhandled_input(event: InputEvent) -> void:
+    if event is InputEventKey and event.pressed and not event.echo:
+        if event.keycode == KEY_E:
+            _interact()
+        elif event.keycode == KEY_H:
+            _use_potion()
+        elif event.keycode == KEY_ESCAPE:
+            _message("Family Quest paused.")
+
+    if event is InputEventScreenTouch and event.pressed:
+        if _is_touch_over_hud(event.position):
+            return
+
+        _try_tap_interaction(event.position)
+
+
+func _is_touch_over_hud(touch_position: Vector2) -> bool:
+    if not is_instance_valid(attack_button):
+        return false
+
+    var controls: Array[Control] = [
+        attack_button,
+        interact_button,
+        potion_button,
+        respawn_button,
+        class_buttons
+    ]
+
+    for control in controls:
+        if not is_instance_valid(control):
+            continue
+
+        if control.get_global_rect().has_point(touch_position):
+            return true
+
+    return false
+
+
+func _try_tap_interaction(screen_position: Vector2) -> void:
+    if not is_instance_valid(camera):
         return
 
-    if bool(player.get("is_dead")):
+    var ray_origin := camera.project_ray_origin(screen_position)
+    var ray_direction := camera.project_ray_normal(screen_position)
+    var ray_end := ray_origin + ray_direction * 100.0
+
+    var query := PhysicsRayQueryParameters3D.create(
+        ray_origin,
+        ray_end
+    )
+
+    query.exclude = [player.get_rid()]
+
+    var result := get_world_3d().direct_space_state.intersect_ray(query)
+
+    if result.is_empty():
         return
 
-    if potions <= 0:
-        _show_message("You have no potions.")
+    var hit_object: Object = result.get("collider")
+
+    if hit_object is Node:
+        var node := hit_object as Node
+
+        while is_instance_valid(node):
+            if node.has_meta("interactable"):
+                if node.get_meta("interactable") == true:
+                    _interact_with_object(node)
+                    return
+
+            node = node.get_parent()
+
+    # Tapping an enemy selects it for a short-range attack.
+    if hit_object is Node:
+        var hit_node := hit_object as Node
+
+        while is_instance_valid(hit_node):
+            if hit_node.is_in_group("enemies"):
+                _attack_specific_enemy(hit_node as Node3D)
+                return
+
+            hit_node = hit_node.get_parent()
+
+
+func _attack_specific_enemy(enemy: Node3D) -> void:
+    if dead or not is_instance_valid(enemy):
         return
 
-    var current_hp := int(player.get("current_health"))
-    var maximum_hp := int(player.get("max_health"))
+    var distance := player.global_position.distance_to(
+        enemy.global_position
+    )
 
-    if current_hp >= maximum_hp:
-        _show_message("Your health is already full.")
+    if distance > ATTACK_RANGE:
+        _message("Move closer to attack.")
         return
 
-    potions -= 1
-    player.call("heal", 50)
-    _show_message("Potion used.")
-    _refresh_hud()
-
-
-func _respawn_player() -> void:
-    if not is_instance_valid(player):
+    if attack_cooldown > 0.0:
         return
 
-    player.call("revive", PLAYER_START)
-    _show_message("You have returned to Hearthvale.")
+    attack_cooldown = 0.5
 
+    if enemy.has_method("take_hit"):
+        enemy.call("take_hit", 20)
 
-# ============================================================
-# INTERACTION AND QUESTS
-# ============================================================
 
 func _interact() -> void:
-    if not is_instance_valid(player):
+    if dead or not is_instance_valid(player):
         return
 
-    if bool(player.get("is_dead")):
-        return
-
-    var nearest_npc: Node3D = null
-    var npc_distance := 4.0
+    var nearest: Node3D
+    var nearest_distance := INTERACT_RANGE
 
     for npc in npcs:
         if not is_instance_valid(npc):
@@ -671,220 +802,298 @@ func _interact() -> void:
             npc.global_position
         )
 
-        if distance < npc_distance:
-            npc_distance = distance
-            nearest_npc = npc
-
-    if nearest_npc != null:
-        _talk_to_npc(nearest_npc)
-        return
-
-    var nearest_objective: Node3D = null
-    var objective_distance := 3.0
+        if distance < nearest_distance:
+            nearest = npc
+            nearest_distance = distance
 
     for objective in objectives:
         if not is_instance_valid(objective):
             continue
 
-        if bool(objective.get_meta("collected", false)):
+        if objective.get_meta("collected", false):
             continue
 
         var distance := player.global_position.distance_to(
             objective.global_position
         )
 
-        if distance < objective_distance:
-            objective_distance = distance
-            nearest_objective = objective
+        if distance < nearest_distance:
+            nearest = objective
+            nearest_distance = distance
 
-    if nearest_objective != null:
-        _collect_objective(nearest_objective)
+    if is_instance_valid(nearest):
+        _interact_with_object(nearest)
+    else:
+        _message("Nothing nearby to interact with.")
+
+
+func _interact_with_object(target: Node) -> void:
+    if not is_instance_valid(target):
         return
 
-    _show_message("Move closer to a person or item.")
+    if not is_instance_valid(player):
+        return
+
+    var distance := player.global_position.distance_to(
+        target.global_position
+    )
+
+    if distance > INTERACT_RANGE:
+        _message("Move closer to interact.")
+        return
+
+    if target.has_meta("interaction_type"):
+        var interaction_type := str(target.get_meta("interaction_type"))
+
+        match interaction_type:
+            "npc":
+                _talk_to_npc(target)
+            "herb":
+                _collect_herb(target)
+            "crate":
+                _collect_crate(target)
+            "quest_board":
+                _message("Quest Board: Speak with the Elder for your next task.")
+            _:
+                _message("You interact with %s." % target.name)
 
 
-func _talk_to_npc(npc: Node3D) -> void:
-    var role := str(npc.get_meta("role", ""))
+func _talk_to_npc(npc: Node) -> void:
+    var role := str(npc.get_meta("role", npc.name))
 
     match role:
-        "elder":
-            _advance_quest()
-        "blacksmith":
+        "Elder":
+            _talk_to_elder()
+        "Blacksmith":
+            _message("Blacksmith: Defeat monsters to earn silver for equipment.")
+        "Merchant":
+            _message("Merchant: Potions cost 10 silver.")
             if silver >= 10:
                 silver -= 10
-                player.call("heal", 40)
-                _show_message("The blacksmith repaired your armor. -10 Silver.")
-            else:
-                _show_message("Blacksmith: Bring me 10 Silver for repairs.")
-        "merchant":
-            if silver >= 15:
-                silver -= 15
                 potions += 1
-                _show_message("You bought a potion for 15 Silver.")
-            else:
-                _show_message("Merchant: A potion costs 15 Silver.")
+                _message("Purchased a potion.")
+                _refresh()
+        "Guard":
+            _message("Guard: The forest path is dangerous. Stay alert.")
+        _:
+            _message("You speak with %s." % role)
 
-    _refresh_hud()
 
-
-func _advance_quest() -> void:
+func _talk_to_elder() -> void:
     match quest_stage:
         0:
             quest_stage = 1
-            _show_message("Quest 1: Defeat 3 forest enemies.")
+            _message("Elder: Defeat 3 monsters near the village.")
         1:
-            if enemies_defeated >= 3:
+            if enemies_defeated >= MOBS_REQUIRED:
                 quest_stage = 2
                 chore_gold += 10
-                silver += 15
+                silver += 25
                 xp += 50
-                _show_message("Quest complete! Earned Gold, Silver, and XP.")
+                _check_level_up()
+                _message("Quest complete! Earned 10 Gold and 25 Silver.")
             else:
-                _show_message(
-                    "Defeat 3 enemies first. (%d/3)" % mini(enemies_defeated, 3)
+                _message(
+                    "Elder: Defeat %d more village monsters."
+                    % (MOBS_REQUIRED - enemies_defeated)
                 )
         2:
+            _message("Elder: Collect 3 healing herbs in the forest.")
             quest_stage = 3
-            _show_message("Quest 2: Gather 3 herbs from the forest.")
         3:
             if herbs_collected >= 3:
                 quest_stage = 4
                 chore_gold += 10
-                silver += 15
+                silver += 20
                 xp += 50
-                _show_message("Quest complete! The herbs have been gathered.")
+                _check_level_up()
+                _message("Herb quest complete! Rewards earned.")
             else:
-                _show_message(
-                    "Gather 3 herbs first. (%d/3)" % mini(herbs_collected, 3)
+                _message(
+                    "Elder: You have collected %d of 3 herbs."
+                    % herbs_collected
                 )
         4:
+            _message("Elder: Defeat 5 enemies along the forest path.")
             quest_stage = 5
-            _show_message("Quest 3: Collect 2 supply crates.")
         5:
-            if crates_collected >= 2:
+            if path_enemies_defeated >= PATH_MOBS_REQUIRED:
                 quest_stage = 6
-                chore_gold += 15
-                silver += 20
-                xp += 75
-                _show_message("Quest complete! Hearthvale's supplies are restored.")
-            else:
-                _show_message(
-                    "Find both supply crates. (%d/2)" % mini(crates_collected, 2)
-                )
-        6:
-            quest_stage = 7
-            _show_message("Quest 4: Defeat all remaining forest enemies.")
-        7:
-            if _all_enemies_defeated():
-                quest_stage = 8
                 chore_gold += 20
-                silver += 30
+                silver += 50
                 xp += 100
-                _show_message("Quest complete! The forest is safe.")
+                _check_level_up()
+                _message("Forest quest complete! Well done, hero.")
             else:
-                _show_message("Defeat the remaining forest enemies.")
-        8:
-            quest_stage = 9
-            _show_message("Quest 5: Explore the far forest path.")
-        9:
-            if player.global_position.z < -45.0:
-                quest_stage = 10
-                chore_gold += 25
-                silver += 40
-                xp += 150
-                _show_message("Hearthvale chapter complete!")
-            else:
-                _show_message("Follow the forest path farther north.")
+                _message(
+                    "Elder: Defeat %d more forest enemies."
+                    % (PATH_MOBS_REQUIRED - path_enemies_defeated)
+                )
         _:
-            _show_message("Elder: You are a hero of Hearthvale!")
+            _message("Elder: You have completed the current Hearthvale quests.")
 
-    _refresh_hud()
+    _refresh()
 
 
-func _collect_objective(objective: Node3D) -> void:
-    if bool(objective.get_meta("collected", false)):
+func _collect_herb(herb: Node) -> void:
+    if herb.get_meta("collected", false):
         return
 
-    objective.set_meta("collected", true)
+    herb.set_meta("collected", true)
+    herbs_collected += 1
+    xp += 5
+    _check_level_up()
 
-    var kind := str(objective.get_meta("objective_type", ""))
+    herb.queue_free()
+    _refresh()
 
-    if kind == "herb":
-        herbs_collected += 1
-        xp += 5
-        _show_message("Herb collected! (%d/3)" % mini(herbs_collected, 3))
-    elif kind == "crate":
-        crates_collected += 1
-        _show_message("Supply crate collected! (%d/2)" % mini(crates_collected, 2))
-
-    objective.queue_free()
-    _refresh_hud()
+    _message("Herb collected! (%d total)" % herbs_collected)
 
 
-func _all_enemies_defeated() -> bool:
-    for enemy in enemies:
-        if is_instance_valid(enemy) and not bool(enemy.get_meta("dead", false)):
-            return false
+func _collect_crate(crate: Node) -> void:
+    if crate.get_meta("collected", false):
+        return
 
-    return true
+    crate.set_meta("collected", true)
+    crates_collected += 1
+    silver += 5
+    xp += 5
+    _check_level_up()
 
+    crate.queue_free()
+    _refresh()
 
-# ============================================================
-# HERO CLASSES
-# ============================================================
-
-func _select_class(selected_class_name: String) -> void:
-    hero_class = selected_class_name
-
-    if is_instance_valid(player):
-        player.call("set_hero_class", selected_class_name)
-
-    _show_message("Hero class changed to %s." % selected_class_name)
-    _refresh_hud()
+    _message("Supply crate opened! +5 Silver.")
 
 
-# ============================================================
+func _update_quest_progress() -> void:
+    if quest_stage == 1 and enemies_defeated >= MOBS_REQUIRED:
+        _message("Village monster objective complete. Return to the Elder.")
+
+    if quest_stage == 3 and herbs_collected >= 3:
+        _message("Herb objective complete. Return to the Elder.")
+
+    if quest_stage == 5 and path_enemies_defeated >= PATH_MOBS_REQUIRED:
+        _message("Forest objective complete. Return to the Elder.")
+
+
+# ==================================================
+# POTIONS AND RESPAWN
+# ==================================================
+
+func _use_potion() -> void:
+    if dead or not is_instance_valid(player):
+        return
+
+    if potions <= 0:
+        _message("You have no potions.")
+        return
+
+    if player.get("current_health") >= player.get("max_health"):
+        _message("Your health is already full.")
+        return
+
+    potions -= 1
+
+    if player.has_method("heal"):
+        player.call("heal", 50)
+
+    _refresh()
+    _message("Potion used. Restored up to 50 HP.")
+
+
+func _respawn_player() -> void:
+    if not is_instance_valid(player):
+        return
+
+    if player.has_method("revive"):
+        player.call("revive", PLAYER_START)
+
+    dead = false
+
+    if is_instance_valid(respawn_button):
+        respawn_button.visible = false
+
+    _refresh()
+    _message("You have returned to Hearthvale.")
+
+
+func _on_player_died() -> void:
+    dead = true
+    _message("You have fallen! Press Respawn to return to Hearthvale.")
+
+    if is_instance_valid(respawn_button):
+        respawn_button.visible = true
+
+    _refresh()
+
+
+func _on_player_revived() -> void:
+    dead = false
+
+    if is_instance_valid(respawn_button):
+        respawn_button.visible = false
+
+    _refresh()
+
+
+func _on_player_health_changed(
+    current_hp: int,
+    maximum_hp: int
+) -> void:
+    if is_instance_valid(health_label):
+        health_label.text = "HP: %d / %d" % [
+            current_hp,
+            maximum_hp
+        ]
+
+
+# ==================================================
 # HUD
-# ============================================================
+# Main HUD owns the action buttons.
+# Player.gd owns the joystick.
+# ==================================================
 
 func _create_hud() -> void:
-    hud = CanvasLayer.new()
-    hud.name = "GameHUD"
-    add_child(hud)
+    var layer := CanvasLayer.new()
+    layer.name = "GameHUD"
+    add_child(layer)
 
     var root := Control.new()
     root.name = "HUDRoot"
     root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    hud.add_child(root)
+    root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    layer.add_child(root)
 
-    var info_panel := PanelContainer.new()
-    info_panel.position = Vector2(12.0, 12.0)
-    info_panel.custom_minimum_size = Vector2(280.0, 145.0)
-    root.add_child(info_panel)
+    var top_panel := PanelContainer.new()
+    top_panel.position = Vector2(12.0, 12.0)
+    top_panel.size = Vector2(220.0, 110.0)
+    top_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    root.add_child(top_panel)
 
-    var info_column := VBoxContainer.new()
-    info_panel.add_child(info_column)
-
-    var title := Label.new()
-    title.text = "FAMILY QUEST - HEARTHVALE"
-    info_column.add_child(title)
+    var top_column := VBoxContainer.new()
+    top_panel.add_child(top_column)
 
     health_label = Label.new()
-    info_column.add_child(health_label)
+    health_label.text = "HP: 100 / 100"
+    top_column.add_child(health_label)
 
     level_label = Label.new()
-    info_column.add_child(level_label)
+    level_label.text = "Level 1 | XP 0/100"
+    top_column.add_child(level_label)
 
     currency_label = Label.new()
-    info_column.add_child(currency_label)
+    currency_label.text = "Silver: 0 | Gold: 0"
+    top_column.add_child(currency_label)
 
     class_label = Label.new()
-    info_column.add_child(class_label)
+    class_label.text = "Class: Warrior"
+    top_column.add_child(class_label)
 
     var quest_panel := PanelContainer.new()
-    quest_panel.position = Vector2(12.0, 165.0)
-    quest_panel.custom_minimum_size = Vector2(290.0, 78.0)
+    quest_panel.position = Vector2(12.0, 132.0)
+    quest_panel.size = Vector2(280.0, 86.0)
+    quest_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
     root.add_child(quest_panel)
 
     quest_label = Label.new()
@@ -892,151 +1101,133 @@ func _create_hud() -> void:
     quest_panel.add_child(quest_label)
 
     message_label = Label.new()
-    message_label.anchor_left = 0.5
-    message_label.anchor_right = 0.5
-    message_label.anchor_top = 1.0
-    message_label.anchor_bottom = 1.0
-    message_label.offset_left = -250.0
-    message_label.offset_right = 250.0
-    message_label.offset_top = -90.0
-    message_label.offset_bottom = -40.0
+    message_label.position = Vector2(300.0, 24.0)
+    message_label.size = Vector2(520.0, 60.0)
+    message_label.add_theme_font_size_override("font_size", 22)
     message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     root.add_child(message_label)
 
-    # Class selection.
-    var class_panel := PanelContainer.new()
-    class_panel.anchor_left = 1.0
-    class_panel.anchor_right = 1.0
-    class_panel.offset_left = -385.0
-    class_panel.offset_right = -10.0
-    class_panel.offset_top = 12.0
-    class_panel.offset_bottom = 65.0
-    root.add_child(class_panel)
+    class_buttons = HBoxContainer.new()
+    class_buttons.position = Vector2(250.0, 100.0)
+    class_buttons.size = Vector2(440.0, 42.0)
+    root.add_child(class_buttons)
 
-    var class_row := HBoxContainer.new()
-    class_panel.add_child(class_row)
+    for class_name in ["Warrior", "Mage", "Rogue", "Druid", "Ranger"]:
+        var class_button := Button.new()
+        class_button.text = class_name
+        class_button.custom_minimum_size = Vector2(82.0, 38.0)
+        class_button.pressed.connect(
+            _select_class.bind(class_name)
+        )
+        class_buttons.add_child(class_button)
 
-    for selected_class_name in ["Warrior", "Mage", "Rogue", "Druid", "Ranger"]:
-        var button := Button.new()
-        button.text = selected_class_name
-        button.custom_minimum_size = Vector2(68.0, 40.0)
-        button.pressed.connect(_select_class.bind(selected_class_name))
-        class_row.add_child(button)
-
-    # Gameplay buttons. The player.gd script supplies the joystick
-    # and camera touch controls.
-    attack_button = _make_hud_button(
-        root, "ATTACK", Vector2(-165.0, -150.0), Vector2(145.0, 65.0)
+    attack_button = Button.new()
+    attack_button.text = "ATTACK"
+    attack_button.size = Vector2(100.0, 66.0)
+    attack_button.set_anchors_and_offsets_preset(
+        Control.PRESET_BOTTOM_RIGHT
     )
+    attack_button.position = Vector2(-115.0, -100.0)
     attack_button.pressed.connect(_attack)
+    root.add_child(attack_button)
 
-    interact_button = _make_hud_button(
-        root, "INTERACT", Vector2(-165.0, -78.0), Vector2(145.0, 60.0)
+    interact_button = Button.new()
+    interact_button.text = "INTERACT"
+    interact_button.size = Vector2(100.0, 52.0)
+    interact_button.set_anchors_and_offsets_preset(
+        Control.PRESET_BOTTOM_RIGHT
     )
+    interact_button.position = Vector2(-225.0, -88.0)
     interact_button.pressed.connect(_interact)
+    root.add_child(interact_button)
 
-    potion_button = _make_hud_button(
-        root, "POTION", Vector2(-315.0, -78.0), Vector2(135.0, 60.0)
+    potion_button = Button.new()
+    potion_button.text = "POTION"
+    potion_button.size = Vector2(90.0, 52.0)
+    potion_button.set_anchors_and_offsets_preset(
+        Control.PRESET_BOTTOM_RIGHT
     )
+    potion_button.position = Vector2(-115.0, -170.0)
     potion_button.pressed.connect(_use_potion)
+    root.add_child(potion_button)
 
-    respawn_button = _make_hud_button(
-        root, "RESPAWN", Vector2(-315.0, -150.0), Vector2(135.0, 60.0)
+    respawn_button = Button.new()
+    respawn_button.text = "RESPAWN"
+    respawn_button.size = Vector2(130.0, 56.0)
+    respawn_button.set_anchors_and_offsets_preset(
+        Control.PRESET_CENTER
     )
     respawn_button.pressed.connect(_respawn_player)
-
-    _refresh_hud()
-
-
-func _make_hud_button(
-    parent: Control,
-    button_text: String,
-    offset: Vector2,
-    button_size: Vector2
-) -> Button:
-    var button := Button.new()
-    button.text = button_text
-    button.custom_minimum_size = button_size
-    button.anchor_left = 1.0
-    button.anchor_right = 1.0
-    button.anchor_top = 1.0
-    button.anchor_bottom = 1.0
-    button.offset_left = offset.x
-    button.offset_right = offset.x + button_size.x
-    button.offset_top = offset.y
-    button.offset_bottom = offset.y + button_size.y
-    parent.add_child(button)
-    return button
+    respawn_button.visible = false
+    root.add_child(respawn_button)
 
 
-func _refresh_hud() -> void:
-    if is_instance_valid(level_label):
-        level_label.text = "Level: %d | XP: %d" % [level, xp]
+func _select_class(new_class: String) -> void:
+    hero_class = new_class
 
-    if is_instance_valid(currency_label):
-        currency_label.text = "Gold: %d | Silver: %d | Potions: %d" % [
-            chore_gold, silver, potions
-        ]
+    if is_instance_valid(player) and player.has_method("set_hero_class"):
+        player.call("set_hero_class", hero_class)
 
-    if is_instance_valid(class_label):
-        class_label.text = "Class: " + hero_class
+    _refresh()
+    _message("Hero class changed to %s." % hero_class)
 
-    if is_instance_valid(quest_label):
-        quest_label.text = _quest_description()
 
-    if is_instance_valid(player) and is_instance_valid(health_label):
+func _refresh() -> void:
+    if is_instance_valid(player):
         health_label.text = "HP: %d / %d" % [
             int(player.get("current_health")),
             int(player.get("max_health"))
         ]
 
+    if is_instance_valid(level_label):
+        level_label.text = "Level %d | XP %d/%d" % [
+            level,
+            xp,
+            xp_to_next_level
+        ]
 
-func _quest_description() -> String:
+    if is_instance_valid(currency_label):
+        currency_label.text = "Silver: %d | Gold: %d | Potions: %d" % [
+            silver,
+            chore_gold,
+            potions
+        ]
+
+    if is_instance_valid(class_label):
+        class_label.text = "Class: %s" % hero_class
+
+    if is_instance_valid(quest_label):
+        quest_label.text = _get_quest_text()
+
+
+func _get_quest_text() -> String:
     match quest_stage:
         0:
-            return "QUEST: Talk to the Village Elder."
+            return "Quest: Find the Elder in Hearthvale."
         1:
-            return "QUEST 1: Defeat enemies (%d/3)." % mini(enemies_defeated, 3)
+            return "Quest: Defeat village monsters (%d/%d)." % [
+                mini(enemies_defeated, MOBS_REQUIRED),
+                MOBS_REQUIRED
+            ]
         2:
-            return "QUEST: Return to the Village Elder."
+            return "Quest: Return to the Elder."
         3:
-            return "QUEST 2: Gather herbs (%d/3)." % mini(herbs_collected, 3)
+            return "Quest: Collect herbs (%d/3)." % mini(herbs_collected, 3)
         4:
-            return "QUEST: Return to the Village Elder."
+            return "Quest: Return to the Elder."
         5:
-            return "QUEST 3: Collect crates (%d/2)." % mini(crates_collected, 2)
-        6:
-            return "QUEST: Return to the Village Elder."
-        7:
-            return "QUEST 4: Defeat remaining enemies."
-        8:
-            return "QUEST: Return to the Village Elder."
-        9:
-            return "QUEST 5: Explore the far forest path."
+            return "Quest: Defeat forest enemies (%d/%d)." % [
+                mini(path_enemies_defeated, PATH_MOBS_REQUIRED),
+                PATH_MOBS_REQUIRED
+            ]
         _:
-            return "HEARTHVALE CHAPTER COMPLETE!"
+            return "Hearthvale: Current quests completed!"
 
 
-func _show_message(message: String) -> void:
-    if is_instance_valid(message_label):
-        message_label.text = message
-        message_timer = 5.0
-    else:
-        print(message)
+func _message(text: String) -> void:
+    if not is_instance_valid(message_label):
+        return
 
-
-# ============================================================
-# KEYBOARD INPUT FOR TESTING
-# Android players use the on-screen buttons and player joystick.
-# ============================================================
-
-func _unhandled_input(event: InputEvent) -> void:
-    if event is InputEventKey and event.pressed and not event.echo:
-        match event.keycode:
-            KEY_SPACE:
-                _attack()
-            KEY_E:
-                _interact()
-            KEY_H:
-                _use_potion()
+    message_label.text = text
+    message_timer = 4.0
