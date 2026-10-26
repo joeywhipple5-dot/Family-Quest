@@ -94,6 +94,7 @@ func _ready() -> void:
 
     _refresh()
     _show_startup_debug("Startup complete!")
+    _message("Welcome to Hearthvale! Speak to the Elder.")
 
 
 func _show_startup_debug(message: String) -> void:
@@ -123,11 +124,16 @@ func _show_startup_debug(message: String) -> void:
     var status := layer.get_node("Status") as Label
     status.text = message
 
+    
+
+func _process(delta: float) -> void:
+    attack_cooldown = max(0.0, attack_cooldown - delta)
+    message_timer = max(0.0, message_timer - delta)
+
     if message_timer <= 0.0 and is_instance_valid(message_label):
-        message_label.text = ""115.01
+        message_label.text = ""
 
     _update_camera()
-
 
 # ==================================================
 # ENVIRONMENT AND WORLD
