@@ -5,11 +5,12 @@ signal health_changed(current_hp: int, maximum_hp: int)
 signal player_died
 signal player_revived
 
-# --------------------------------------------------
+# ==================================================
 # FAMILY QUEST - PLAYER
 # Godot 4.3
-# Fixed bottom-left mobile joystick
-# --------------------------------------------------
+# Fixed bottom-left joystick
+# Compatible with main.gd and enemy.gd
+# ==================================================
 
 @export_group("Movement")
 @export var move_speed: float = 5.0
@@ -27,6 +28,7 @@ signal player_revived
 
 var current_health: int = 100
 var dead: bool = false
+
 var hero_class: String = "Warrior"
 var hero_gender: String = "Male"
 
@@ -39,10 +41,11 @@ var joystick_touch_index: int = -1
 var joystick_origin: Vector2 = Vector2.ZERO
 var joystick_vector: Vector2 = Vector2.ZERO
 
-# Nodes
+# Player nodes
 var player_model: MeshInstance3D
 var collision_shape: CollisionShape3D
 
+# Joystick UI
 var joystick_base: Panel
 var joystick_knob: Panel
 var joystick_layer: CanvasLayer
@@ -58,6 +61,10 @@ func _ready() -> void:
     _create_collision()
     _create_joystick()
 
+    var viewport := get_viewport()
+    if not viewport.size_changed.is_connected(_position_joystick):
+        viewport.size_changed.connect(_position_joystick)
+
     health_changed.emit(current_health, max_health)
 
 
@@ -69,18 +76,14 @@ func _physics_process(delta: float) -> void:
     attack_timer = maxf(0.0, attack_timer - delta)
 
     _update_movement(delta)
-
     move_and_slide()
 
 
-# --------------------------------------------------
+# ==================================================
 # PLAYER MODEL
-# --------------------------------------------------
+# ==================================================
 
 func _create_player_model() -> void:
-    if is_instance_valid(player_model):
-        player_model.queue_free()
-
     player_model = MeshInstance3D.new()
     player_model.name = "PlayerModel"
 
@@ -94,8 +97,8 @@ func _create_player_model() -> void:
     var material := StandardMaterial3D.new()
     material.albedo_color = _get_class_color()
     material.roughness = 0.8
-
     player_model.material_override = material
+
     add_child(player_model)
 
 
@@ -116,7 +119,7 @@ func _get_class_color() -> Color:
 
 
 func set_hero_class(new_class: String) -> void:
-    var valid_classes := [
+    var valid_classes: Array[String] = [
         "Warrior",
         "Mage",
         "Rogue",
@@ -141,9 +144,9 @@ func set_hero_gender(new_gender: String) -> void:
         hero_gender = new_gender
 
 
-# --------------------------------------------------
+# ==================================================
 # COLLISION
-# --------------------------------------------------
+# ==================================================
 
 func _create_collision() -> void:
     collision_shape = CollisionShape3D.new()
@@ -159,15 +162,16 @@ func _create_collision() -> void:
     add_child(collision_shape)
 
 
-# --------------------------------------------------
+# ==================================================
 # FIXED MOBILE JOYSTICK
-# Always visible at bottom-left.
-# The base stays still; only the knob moves.
-# --------------------------------------------------
+# The base stays fixed.
+# Only the knob moves while touched.
+# ==================================================
 
 func _create_joystick() -> void:
     joystick_layer = CanvasLayer.new()
     joystick_layer.name = "PlayerJoystickLayer"
+    joystick_layer.layer = 5
     add_child(joystick_layer)
 
     joystick_base = Panel.new()
@@ -176,16 +180,12 @@ func _create_joystick() -> void:
     joystick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
     var base_style := StyleBoxFlat.new()
-    base_style.bg_color = Color(0.08, 0.10, 0.12, 0.62)
-    base_style.border_color = Color(0.75, 0.72, 0.58, 0.9)
+    base_style.bg_color = Color(0.08, 0.10, 0.12, 0.72)
+    base_style.border_color = Color(0.75, 0.72, 0.58, 0.95)
     base_style.set_border_width_all(3)
     base_style.set_corner_radius_all(70)
 
-    joystick_base.add_theme_stylebox_override(
-        "panel",
-        base_style
-    )
-
+    joystick_base.add_theme_stylebox_override("panel", base_style)
     joystick_layer.add_child(joystick_base)
 
     joystick_knob = Panel.new()
@@ -194,16 +194,12 @@ func _create_joystick() -> void:
     joystick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
     var knob_style := StyleBoxFlat.new()
-    knob_style.bg_color = Color(0.72, 0.68, 0.52, 0.92)
+    knob_style.bg_color = Color(0.72, 0.68, 0.52, 0.95)
     knob_style.border_color = Color(0.95, 0.88, 0.67, 1.0)
     knob_style.set_border_width_all(2)
     knob_style.set_corner_radius_all(32)
 
-    joystick_knob.add_theme_stylebox_override(
-        "panel",
-        knob_style
-    )
-
+    joystick_knob.add_theme_stylebox_override("panel", knob_style)
     joystick_layer.add_child(joystick_knob)
 
     _position_joystick()
@@ -215,10 +211,9 @@ func _position_joystick() -> void:
 
     var screen_size := get_viewport().get_visible_rect().size
 
-    # Fixed bottom-left placement.
     joystick_base.position = Vector2(
         28.0,
-        screen_size.y - 168.0
+        maxf(8.0, screen_size.y - 168.0)
     )
 
     if not joystick_active:
@@ -228,7 +223,6 @@ func _position_joystick() -> void:
 func _center_joystick_knob() -> void:
     if not is_instance_valid(joystick_base):
         return
-
     if not is_instance_valid(joystick_knob):
         return
 
@@ -265,17 +259,15 @@ func _try_start_joystick(
 ) -> void:
     if joystick_active:
         return
-
     if not is_instance_valid(joystick_base):
         return
 
-    var base_rect := Rect2(
+    var joystick_rect := Rect2(
         joystick_base.position,
         joystick_base.size
     )
 
-    # Only touches beginning on the joystick activate it.
-    if not base_rect.has_point(touch_position):
+    if not joystick_rect.has_point(touch_position):
         return
 
     joystick_active = true
@@ -298,9 +290,7 @@ func _update_joystick(touch_position: Vector2) -> void:
 
     if is_instance_valid(joystick_knob):
         joystick_knob.position = (
-            joystick_origin
-            + offset
-            - joystick_knob.size * 0.5
+            joystick_origin + offset - joystick_knob.size * 0.5
         )
 
 
@@ -312,16 +302,15 @@ func _stop_joystick() -> void:
     _center_joystick_knob()
 
 
-# --------------------------------------------------
+# ==================================================
 # MOVEMENT
-# Joystick and keyboard both work.
-# Movement is relative to the game world's axes.
-# --------------------------------------------------
+# Fixed joystick movement relative to world axes.
+# Keyboard controls remain available for testing.
+# ==================================================
 
 func _update_movement(delta: float) -> void:
     var input_vector := joystick_vector
 
-    # Keyboard fallback for testing in the editor.
     if not joystick_active:
         input_vector = Input.get_vector(
             "ui_left",
@@ -361,14 +350,14 @@ func _update_movement(delta: float) -> void:
     elif velocity.y < 0.0:
         velocity.y = 0.0
 
-    # Face the direction of travel.
     if direction.length_squared() > 0.01:
         rotation.y = atan2(-direction.x, -direction.z)
 
 
-# --------------------------------------------------
+# ==================================================
 # HEALTH
-# --------------------------------------------------
+# Used by enemy.gd and main.gd.
+# ==================================================
 
 func take_damage(amount: int) -> void:
     if dead or amount <= 0:
@@ -377,7 +366,7 @@ func take_damage(amount: int) -> void:
     current_health = maxi(0, current_health - amount)
     health_changed.emit(current_health, max_health)
 
-    if current_health <= 0:
+    if current_health == 0:
         _die()
 
 
@@ -385,11 +374,7 @@ func heal(amount: int) -> void:
     if dead or amount <= 0:
         return
 
-    current_health = mini(
-        max_health,
-        current_health + amount
-    )
-
+    current_health = mini(max_health, current_health + amount)
     health_changed.emit(current_health, max_health)
 
 
@@ -409,6 +394,7 @@ func _die() -> void:
     velocity = Vector3.ZERO
 
     _stop_joystick()
+    health_changed.emit(current_health, max_health)
     player_died.emit()
 
 
@@ -418,19 +404,20 @@ func revive(spawn_position: Vector3 = Vector3.ZERO) -> void:
     current_health = max_health
     dead = false
 
+    _stop_joystick()
+
     health_changed.emit(current_health, max_health)
     player_revived.emit()
 
 
-# Compatibility alias for scripts using respawn().
 func respawn(spawn_position: Vector3 = Vector3.ZERO) -> void:
     revive(spawn_position)
 
 
-# --------------------------------------------------
+# ==================================================
 # ATTACK
-# Main.gd will handle selecting and damaging enemies.
-# --------------------------------------------------
+# Main.gd handles enemy selection and damage.
+# ==================================================
 
 func perform_attack() -> void:
     if dead or attack_timer > 0.0:
@@ -448,8 +435,7 @@ func use_ability() -> void:
     if dead:
         return
 
-    # Ability behavior will be connected to the class
-    # system when the combat scripts are matched.
+    # Class abilities can be connected here later.
 
 
 func dodge() -> void:
@@ -473,13 +459,3 @@ func dodge() -> void:
 
     velocity.x = dodge_direction.x * move_speed * 2.0
     velocity.z = dodge_direction.z * move_speed * 2.0
-
-
-# --------------------------------------------------
-# RESIZE SUPPORT
-# --------------------------------------------------
-
-func _notification(what: int) -> void:
-    if what == NOTIFICATION_WM_SIZE_CHANGED:
-        if is_instance_valid(joystick_base):
-            _position_joystick()
