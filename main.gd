@@ -60,27 +60,71 @@ var class_buttons: HBoxContainer
 # STARTUP
 # ==================================================
 
+
+
 func _ready() -> void:
+    _show_startup_debug("Starting gameplay...")
+
+    _show_startup_debug("Step 1: Environment")
     _create_environment()
+
+    _show_startup_debug("Step 2: World")
     _create_world()
+
+    _show_startup_debug("Step 3: Village")
     _create_village()
+
+    _show_startup_debug("Step 4: Player")
     _create_player()
+
+    _show_startup_debug("Step 5: NPCs")
     _create_npcs()
+
+    _show_startup_debug("Step 6: Objectives")
     _create_objectives()
+
+    _show_startup_debug("Step 7: Enemies")
     _create_enemies()
+
+    _show_startup_debug("Step 8: Camera")
     _create_camera()
+
+    _show_startup_debug("Step 9: HUD")
     _create_hud()
 
     _refresh()
-    _message("Welcome to Hearthvale! Speak to the Elder.")
+    _show_startup_debug("Startup complete!")
 
 
-func _process(delta: float) -> void:
-    attack_cooldown = maxf(0.0, attack_cooldown - delta)
-    message_timer = maxf(0.0, message_timer - delta)
+func _show_startup_debug(message: String) -> void:
+    var layer := get_node_or_null("StartupDebugLayer") as CanvasLayer
+
+    if layer == null:
+        layer = CanvasLayer.new()
+        layer.name = "StartupDebugLayer"
+        layer.layer = 100
+        add_child(layer)
+
+        var background := ColorRect.new()
+        background.name = "Background"
+        background.color = Color(0.05, 0.05, 0.05, 0.9)
+        background.position = Vector2(12, 12)
+        background.size = Vector2(340, 64)
+        layer.add_child(background)
+
+        var label := Label.new()
+        label.name = "Status"
+        label.position = Vector2(22, 20)
+        label.size = Vector2(320, 50)
+        label.add_theme_color_override("font_color", Color.WHITE)
+        label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        layer.add_child(label)
+
+    var status := layer.get_node("Status") as Label
+    status.text = message
 
     if message_timer <= 0.0 and is_instance_valid(message_label):
-        message_label.text = ""
+        message_label.text = ""115.01
 
     _update_camera()
 
