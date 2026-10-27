@@ -412,20 +412,16 @@ func _create_hud() -> void:
 	_add_button(buttons, "Attack", _attack)
 	_add_button(buttons, "Interact", _interact)
 	_add_button(buttons, "Potion", _use_potion)
-	_add_button(buttons, "Respawn", _respawn_player)
 
-	var class_row := HBoxContainer.new()
-	class_row.position = Vector2(8, 305)
-	hud_layer.add_child(class_row)
-	for class_name in ["Warrior", "Mage", "Rogue", "Druid", "Ranger"]:
-		_add_button(class_row, class_name,
-			_select_class.bind(class_name))
+	for class_option in ["Warrior", "Mage", "Rogue", "Druid", "Ranger"]:
+    _add_button(class_row, class_option,
+        _select_class.bind(class_option))
 
 func _new_label(text_value: String) -> Label:
 	var label := Label.new()
 	label.text = text_value
 	label.add_theme_font_size_override("font_size", 18)
-	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_acolor", Color.WHITE)
 	return label
 
 func _add_button(parent: Control, text_value: String,
@@ -674,8 +670,12 @@ func _use_potion() -> void:
 	_message("Potion used: restored up to 40 health.")
 	_refresh_hud()
 
-func _select_class(class_name: String) -> void:
-	hero_class = class_name
+func _select_class(selected_class: String) -> void:
+    hero_class = selected_class
+    if is_instance_valid(player) and player.has_method("set_hero_class"):
+        player.call("set_hero_class", hero_class)
+    _refresh_hud()
+    _message("Hero class changed to " + hero_class + ".")
 	if is_instance_valid(player) and player.has_method("set_hero_class"):
 		player.call("set_hero_class", hero_class)
 	_refresh_hud()
